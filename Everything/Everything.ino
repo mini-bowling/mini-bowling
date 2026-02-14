@@ -1,5 +1,6 @@
 // VERSION 1.0 - original rev67 files by Danny Lum
 
+
 // =====================================================
 // Pinsetter Deck + Turret Controller
 // NeoPixels serial-safe
@@ -25,7 +26,7 @@
 #include <AccelStepper.h>
 
 // 
-#define VERSION "72.2"
+#define VERSION "1.1.0"
 
 // =============== ScoreMore Serial ===============
 #define SCOREMORE_BAUD 9600
@@ -313,8 +314,6 @@ void startStrikeCycle(); void startTurretReleaseCycle();
 
 // Conveyors
 void updateConveyorOutput(); void ConveyorOn(); void ConveyorOff();
-// Added Overloaded function to allow debugging when conveyor is turned on and off
-void ConveyorOn(String reason); void ConveyorOff(String reason);
 
 // Sweep tween
 static int clampInt(int v,int lo,int hi);
@@ -340,9 +339,7 @@ unsigned long postSetResumeStart = 0;
 
 // ======================= SETUP =======================
 void setup(){
-//  Serial.begin(SCOREMORE_BAUD); delay(1000); Serial.println("READY");
   ledsBegin();
-
   pinMode(PINSETTER_RESET_PIN, INPUT_PULLUP);
   // Frame LEDs
   pinMode(FRAME_LED1, OUTPUT);
@@ -895,7 +892,7 @@ void goTo(long pos){
 // ---------- Non-blocking homing ----------
 void startHomeTurret(){
   homingActive=true; homingPhase=HOME_PREP_MOVE_TO_SLOT1;
-  ConveyorOff("LOG: startHomeTurret");
+  ConveyorOff();
   stepper1.setAcceleration(3000); stepper1.setMaxSpeed(500);
   goTo(PinPositions[1]);
 }
@@ -962,7 +959,7 @@ void startTurretReleaseCycle(){ dropCycleJustFinished=false; turretReleaseReques
 void updateConveyorOutput(){
   if(postSetResumeDelayActive){
     if(millis() - postSetResumeStart < RESUME_AFTER_DECKUP_MS){
-      ConveyorOff("postSetResumeDelayActive");
+      ConveyorOff();
       return;
     }else{
       postSetResumeDelayActive = false;
@@ -970,12 +967,12 @@ void updateConveyorOutput(){
   }
 
   if(conveyorLockedByDwell){
-    if(millis()-releaseDwellStart<RELEASE_FEED_ASSIST_MS) ConveyorOn("conveyorLockedByDwell");  else ConveyorOff("conveyorLockedByDwell");
+    if(millis()-releaseDwellStart<RELEASE_FEED_ASSIST_MS) ConveyorOn();  else ConveyorOff();
     return;
   }
-  if(suspendConveyorUntilHomeDone){ ConveyorOff("suspendConveyorUntilHomeDone"); return; }
+  if(suspendConveyorUntilHomeDone){ ConveyorOff(); return; }
 
-  if(conesFullHold){ ConveyorOff("conseFullHold"); return; }
+  if(conesFullHold){ ConveyorOff(); return; }
 
   bool need=false;
 
@@ -1004,7 +1001,7 @@ void updateConveyorOutput(){
       }
     }
   }
-  if(need) ConveyorOn("need"); else ConveyorOff("need");
+  if(need) ConveyorOn(); else ConveyorOff();
 }
 void OutputNeedData(){
   char printOutput[1024];
@@ -1032,19 +1029,6 @@ void OutputNeedData(){
 }
 void ConveyorOn(){  digitalWrite(MOTOR_RELAY, CONVEYOR_ACTIVE_HIGH?HIGH:LOW); conveyorIsOn=true; }
 void ConveyorOff(){ digitalWrite(MOTOR_RELAY, CONVEYOR_ACTIVE_HIGH?LOW :HIGH); conveyorIsOn=false;}
-void ConveyorOn(String reason){
-  if(!conveyorIsOn){
-//    Serial.println("LOG: Turning Conveyor ON - ");Serial.println(reason);
-//    if(reason=="need") { OutputNeedData();}
-  }
-  ConveyorOn();
-}
-void ConveyorOff(String reason){
-//  if(conveyorIsOn){
-//    Serial.print("LOG: Turning Conveyor OFF - ");Serial.println(reason);
- // }
-  ConveyorOff();  
-}
 
 // ======================= BALL RETURN DOOR CONTROL =======================
 void onBallThrownDoorClose(){
