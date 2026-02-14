@@ -24,6 +24,9 @@
 #include <Servo.h>
 #include <AccelStepper.h>
 
+// 
+#define VERSION "72.2"
+
 // =============== ScoreMore Serial ===============
 #define SCOREMORE_BAUD 9600
 
@@ -92,26 +95,28 @@ void updateFrameLEDs();
 void frameLEDsFirstHalf();
 
 // =============== ScoreMore mapping =================
-const int maxPins=17;
-const int scoreMorePins[maxPins]={2,3,4,5,6,7,8,9,10,11,12,14,15,16,17,18,19};
+const int maxPins=18;
+const int scoreMorePins[maxPins]={2,3,4,5,6,7,8,9,10,11,12,14,15,16,17,18,19,20};
 const int arduinoPins [maxPins]={
-  A2,
-  A3,
-  A4,
-  A5,
+  A2, //Pin 2
+  A3, //Pin 3
+  A4, //Pin 4
+  A5, //Pin 5
   A0, //Trigger Sensor
   40, //Auto Reset Trigger
   A1, //Ball Speed Sensor
-  42,
-  43,
-  44,
-  45,
-  A1,
-  A6,
-  A7,
-  A8,
-  A9,
-  A10};
+  42, //Spare / Strike Light
+  43, //Strike Light
+  46, //1st Ball Light
+  47, //2nd Ball Light
+  A1, //Pin 1
+  A6, //Pin 6
+  A7, //Pin 7
+  A8, //Pin 8
+  A9, //Pin 9
+  A10,//Pin 10
+  45  //clear and reset pins on lane
+  }; 
 const int bowlingPins[]={2,3,4,5,14,15,16,17,18,19};
 const int bowlingPinCount=sizeof(bowlingPins)/sizeof(bowlingPins[0]);
 
@@ -127,11 +132,27 @@ const int bowlingPinCount=sizeof(bowlingPins)/sizeof(bowlingPins[0]);
 #define RIGHT_SWEEP_PIN 12
 #define BALL_RETURN_PIN 13
 #define BALL_SENSOR_PIN A0
+#define BALL_SPEED_SENSOR_PIN A1
+#define PINSETTER_RESET_PIN 45
 #define CONVEYOR_ACTIVE_HIGH 1
 
+
+//Angles of the servos (based on left servo when applicable)
+#define SWEEP_BACK_ANGLE       0  // sweep servo angle for back position *HOME* (default 0)
+#define SWEEP_GUARD_ANGLE     50  // sweep servo angle for guard position (default 50)
+#define SWEEP_UP_ANGLE        85  // sweep servo angle for up position (default 85)
+#define RAISE_UP_ANGLE       180  // raise servo angle for deck fully up  *HOME* (default 180)
+#define RAISE_RELEASE_ANGLE   80  // raise servo angle for deck ready to release grabbed pins (default 80)
+#define RAISE_GRAB_ANGLE      60  // raise servo angle for deck ready to grab pins before sweep (default 60)
+#define RAISE_DOWN_ANGLE      20  // raise servo angle for setting pins (default 20)
+#define SLIDE_FORWARD_ANGLE  180  // slide servo angle for forward position  *HOME* (default 180)
+#define SLIDE_BACK_ANGLE     100  // slide servo angle for back position (default 100)
+#define SCISSORS_OPEN_ANGLE   90  // scissors servo angle for open  *HOME* (default 90)
+#define SCISSORS_CLOSED      140  // scissors servo angle for closed (default 140)
+#define DOOR_CLOSED_ANGLE      0  // door servo angle for closed  *HOME* (default 0)
+#define DOOR_OPEN_ANGLE      180  // door servo angle for open (default 180)
+
 Servo LeftRaiseServo, RightRaiseServo, SlideServo, ScissorsServo, LeftSweepServo, RightSweepServo, BallReturnServo;
-int SweepGuardAngle=50;
-int SweepUpAngle= 85;
 
 // ======================= PAUSE MODE (NEW) =======================
 const unsigned long PAUSE_IDLE_MS = 300000; // 2 minutes
@@ -256,6 +277,7 @@ bool backgroundRefillRequested=false;
 // Force conveyors for ball return
 bool forceConveyorForBallReturn=false;
 
+bool conveyorIsOn=false;
 // ======================= BALL RETURN DOOR FSM =======================
 const unsigned long BR_CLOSE_AFTER_SWEEPBACK_MS=5000;
 enum BallReturnState { BR_IDLE_OPEN=0, BR_IDLE_CLOSED, BR_CLOSED_WAIT_SWEEPBACK, BR_CLOSED_HOLD_AFTER_SWEEP };
@@ -291,6 +313,8 @@ void startStrikeCycle(); void startTurretReleaseCycle();
 
 // Conveyors
 void updateConveyorOutput(); void ConveyorOn(); void ConveyorOff();
+// Added Overloaded function to allow debugging when conveyor is turned on and off
+void ConveyorOn(String reason); void ConveyorOff(String reason);
 
 // Sweep tween
 static int clampInt(int v,int lo,int hi);
@@ -316,13 +340,17 @@ unsigned long postSetResumeStart = 0;
 
 // ======================= SETUP =======================
 void setup(){
-  Serial.begin(SCOREMORE_BAUD); delay(1000); Serial.println("READY");
+//  Serial.begin(SCOREMORE_BAUD); delay(1000); Serial.println("READY");
   ledsBegin();
 
+  pinMode(PINSETTER_RESET_PIN, INPUT_PULLUP);
   // Frame LEDs
   pinMode(FRAME_LED1, OUTPUT);
   pinMode(FRAME_LED2, OUTPUT);
   digitalWrite(FRAME_LED1, LOW);
+  digitalWrite(FRAME_LED2, HIGH);  //indicate to the user that we're in setup
+
+  Serial.begin(SCOREMORE_BAUD); delay(1000); Serial.println("READY");
   digitalWrite(FRAME_LED2, LOW);
 
   pinMode(BALL_SENSOR_PIN, INPUT_PULLUP);
@@ -346,7 +374,9 @@ void setup(){
 
   LeftSweepServo.attach(LEFT_SWEEP_PIN);
   RightSweepServo.attach(RIGHT_SWEEP_PIN);
-
+  
+  // this is a fix from @Bob D to keep the sweep from freaking out on initiaization.
+  setSweepInstant(SWEEP_UP_ANGLE, 180 - SWEEP_UP_ANGLE); 
   SweepUp(); waitSweepDone(); pumpAll(1000);
 
   pinMode(MOTOR_RELAY, OUTPUT); ConveyorOff();
@@ -587,42 +617,43 @@ unsigned long stepDuration(int idx){
 
 // ======================= DECK FUNCTIONS =======================
 void DeckUp() {
-  LeftRaiseServo.write(180);
-  RightRaiseServo.write(0);
-  deckIsUp = true;
+  LeftRaiseServo.write(RAISE_UP_ANGLE);
+  RightRaiseServo.write(180 - RAISE_UP_ANGLE);
   pumpAll(DECK_EXTRA_SETTLE_MS);
+  deckIsUp = true;  //don't report deck as up until we're sure it's all the way up
 }
 
 void DeckPinSet() {
-  LeftRaiseServo.write(20);
-  RightRaiseServo.write(160);
-  deckIsUp = false;
+  LeftRaiseServo.write(RAISE_DOWN_ANGLE);
+  RightRaiseServo.write(180-RAISE_DOWN_ANGLE);
+  deckIsUp = false;  //report deck as not up right away
   pumpAll(DECK_EXTRA_SETTLE_MS);
 }
 
 void DeckPinGrab() {
-  LeftRaiseServo.write(60);
-  RightRaiseServo.write(120);
-  deckIsUp = false;
+  LeftRaiseServo.write(RAISE_GRAB_ANGLE);
+  RightRaiseServo.write(180-RAISE_GRAB_ANGLE);
+  deckIsUp = false;    //report deck is not up right away
   pumpAll(DECK_EXTRA_SETTLE_MS);
 }
 
 void DeckPinDrop() {
-  LeftRaiseServo.write(80);
-  RightRaiseServo.write(100);
+  LeftRaiseServo.write(RAISE_RELEASE_ANGLE);
+  RightRaiseServo.write(180-RAISE_RELEASE_ANGLE);
+  deckIsUp = false;    //report deck is not up right away
   pumpAll(DECK_EXTRA_SETTLE_MS);
 }
 
-void SlidingDeckRelease()  { SlideServo.write(100); }
-void SlidingDeckHome()     { SlideServo.write(180); }
-void ScissorsGrab()        { ScissorsServo.write(140); }
-void ScissorsDrop()        { ScissorsServo.write(90); }
-void BallReturnClosed()    { BallReturnServo.write(0); }
-void BallReturnOpen()      { BallReturnServo.write(180); }
+void SlidingDeckRelease()  { SlideServo.write(SLIDE_BACK_ANGLE); }
+void SlidingDeckHome()     { SlideServo.write(SLIDE_FORWARD_ANGLE); }
+void ScissorsGrab()        { ScissorsServo.write(SCISSORS_CLOSED); }
+void ScissorsDrop()        { ScissorsServo.write(SCISSORS_OPEN_ANGLE); }
+void BallReturnClosed()    { BallReturnServo.write(DOOR_CLOSED_ANGLE); }
+void BallReturnOpen()      { BallReturnServo.write(DOOR_OPEN_ANGLE); }
 
 // NOTE: set sweepPoseTarget so pause mode can tell where we are
-void SweepGuard(){ sweepPoseTarget = SWEEP_GUARD; startSweepTo(SweepGuardAngle, 180-SweepGuardAngle, 500); }
-void SweepUp()   { sweepPoseTarget = SWEEP_UP;    startSweepTo(SweepUpAngle, 180-SweepUpAngle,500); }
+void SweepGuard(){ sweepPoseTarget = SWEEP_GUARD; startSweepTo(SWEEP_GUARD_ANGLE, 180-SWEEP_GUARD_ANGLE, 500); }
+void SweepUp()   { sweepPoseTarget = SWEEP_UP;    startSweepTo(SWEEP_UP_ANGLE, 180-SWEEP_UP_ANGLE,500); }
 void SweepBack() { sweepPoseTarget = SWEEP_BACK;  startSweepTo(0,180,500); }
 
 // ======================= STRIKE SWEEP HELPER =======================
@@ -864,7 +895,7 @@ void goTo(long pos){
 // ---------- Non-blocking homing ----------
 void startHomeTurret(){
   homingActive=true; homingPhase=HOME_PREP_MOVE_TO_SLOT1;
-  ConveyorOff();
+  ConveyorOff("LOG: startHomeTurret");
   stepper1.setAcceleration(3000); stepper1.setMaxSpeed(500);
   goTo(PinPositions[1]);
 }
@@ -931,7 +962,7 @@ void startTurretReleaseCycle(){ dropCycleJustFinished=false; turretReleaseReques
 void updateConveyorOutput(){
   if(postSetResumeDelayActive){
     if(millis() - postSetResumeStart < RESUME_AFTER_DECKUP_MS){
-      ConveyorOff();
+      ConveyorOff("postSetResumeDelayActive");
       return;
     }else{
       postSetResumeDelayActive = false;
@@ -939,12 +970,12 @@ void updateConveyorOutput(){
   }
 
   if(conveyorLockedByDwell){
-    if(millis()-releaseDwellStart<RELEASE_FEED_ASSIST_MS) ConveyorOn(); else ConveyorOff();
+    if(millis()-releaseDwellStart<RELEASE_FEED_ASSIST_MS) ConveyorOn("conveyorLockedByDwell");  else ConveyorOff("conveyorLockedByDwell");
     return;
   }
-  if(suspendConveyorUntilHomeDone){ ConveyorOff(); return; }
+  if(suspendConveyorUntilHomeDone){ ConveyorOff("suspendConveyorUntilHomeDone"); return; }
 
-  if(conesFullHold){ ConveyorOff(); return; }
+  if(conesFullHold){ ConveyorOff("conseFullHold"); return; }
 
   bool need=false;
 
@@ -973,12 +1004,47 @@ void updateConveyorOutput(){
       }
     }
   }
-
-  if(need) ConveyorOn(); else ConveyorOff();
+  if(need) ConveyorOn("need"); else ConveyorOff("need");
 }
-
-void ConveyorOn(){  digitalWrite(MOTOR_RELAY, CONVEYOR_ACTIVE_HIGH?HIGH:LOW); }
-void ConveyorOff(){ digitalWrite(MOTOR_RELAY, CONVEYOR_ACTIVE_HIGH?LOW :HIGH); }
+void OutputNeedData(){
+  char printOutput[1024];
+  int charCount=sprintf(printOutput,
+    "homingActive: %s\n" \
+    "turretFillTo9Requested: %s\n" \
+    "loadedCount: %i\n" \
+    "ninthSettleActive: %s\n" \
+    "deckIsUp: %s\n" \
+    "releaseDwellActive: %s\n" \
+    "turretReleaseRequested: %s\n" \
+    "backgroundRefillRequested: %s\n" \
+    "releaseDwellStart: %i\n" \
+    "forceConveyorForBallReturn: %s \n" \
+    "conesFullHoldArmed: %s \n" \
+    "waitingForBall: %s\n" \
+    "deckConeCount: %i\n", \
+    homingActive ? "true" : "false",turretFillTo9Requested ? "true" : "false",loadedCount, \
+    ninthSettleActive ? "true" : "false",deckIsUp ? "true" : "false",releaseDwellActive ? "true":"false", \
+    turretReleaseRequested ? "true" : "false", \
+    backgroundRefillRequested ? "true" : "false", releaseDwellStart, \
+    forceConveyorForBallReturn ? "true" : "false",conesFullHoldArmed ? "true" : "false", \
+    waitingForBall ? "true" : "false", deckConeCount);
+  Serial.print(printOutput);Serial.print(":");Serial.println(charCount);
+}
+void ConveyorOn(){  digitalWrite(MOTOR_RELAY, CONVEYOR_ACTIVE_HIGH?HIGH:LOW); conveyorIsOn=true; }
+void ConveyorOff(){ digitalWrite(MOTOR_RELAY, CONVEYOR_ACTIVE_HIGH?LOW :HIGH); conveyorIsOn=false;}
+void ConveyorOn(String reason){
+  if(!conveyorIsOn){
+//    Serial.println("LOG: Turning Conveyor ON - ");Serial.println(reason);
+//    if(reason=="need") { OutputNeedData();}
+  }
+  ConveyorOn();
+}
+void ConveyorOff(String reason){
+//  if(conveyorIsOn){
+//    Serial.print("LOG: Turning Conveyor OFF - ");Serial.println(reason);
+ // }
+  ConveyorOff();  
+}
 
 // ======================= BALL RETURN DOOR CONTROL =======================
 void onBallThrownDoorClose(){
@@ -1023,10 +1089,20 @@ void handleCommand(String cmd){
   if(cmd.startsWith("SET_INPUT:")){
     int scoreMorePin=cmd.substring(10).toInt();
     int pin=resolveArduinoPin(scoreMorePin);
-    if(pin!=-1 && !isTrackedInput(pin) && inputCount<maxPins){
-      if(isBowlingPin(scoreMorePin)) pinMode(pin, INPUT_PULLUP); else pinMode(pin, INPUT);
-      inputPins[inputCount]=pin; pinStates[inputCount]=digitalRead(pin); inputCount++;
-      Serial.print("ACK_SET_INPUT:"); Serial.println(scoreMorePin);
+/*    Serial.print("LOG: cmd, ScoremorePin, pin"); 
+    Serial.print(cmd); 
+    Serial.print(",");
+    Serial.print(scoreMorePin);
+    Serial.print(",");
+    Serial.println(pin);*/
+    if(pin!=-1) {
+      if(!isTrackedInput(pin) && inputCount<maxPins){
+        if(isBowlingPin(scoreMorePin)) pinMode(pin, INPUT_PULLUP); else pinMode(pin, INPUT);
+        inputPins[inputCount]=pin; pinStates[inputCount]=digitalRead(pin); inputCount++;
+        Serial.print("ACK_SET_INPUT:"); Serial.println(scoreMorePin);
+      }
+    } else {
+        Serial.print("ACK_SET_INPUT_INVALID_PIN:"); Serial.println(scoreMorePin);
     }
   } else if(cmd.startsWith("SET_OUTPUT:")){
     int scoreMorePin=cmd.substring(11).toInt();
@@ -1034,6 +1110,8 @@ void handleCommand(String cmd){
     if(pin!=-1){
       pinMode(pin, OUTPUT); removeInputPin(pin);
       Serial.print("ACK_SET_OUTPUT:"); Serial.println(scoreMorePin);
+    } else {
+      Serial.print("ACK_SET_OUTPUT_INVALID_PIN:"); Serial.println(scoreMorePin);
     }
 
   } else if(cmd.startsWith("WRITE:")){
@@ -1074,16 +1152,24 @@ void handleCommand(String cmd){
             autoResetEdgeLatched = false;
           }
         }
-
         Serial.print("ACK_WRITE:"); Serial.print(scoreMorePin); Serial.print(":"); Serial.println(value);
-      }
+      } else {
+        Serial.print("ACK_WRITE_INVALID_PIN:");Serial.println(scoreMorePin);
+      } 
     }
   } else if(cmd=="RESET"){
     int strikePin=resolveArduinoPin(10);
     if(strikePin!=-1) digitalWrite(strikePin, LOW);
     strikeLightOn=false; strikeEdgeLatched=false; strikeDetected=false; strikePending=false;
     Serial.println("ACK_RESET");
-  }
+  } else if(cmd=="CHECK_READY"){
+    Serial.println("READY");
+  } else if(cmd=="VERSION"){
+    Serial.println(VERSION);
+  } else if(cmd=="PINSETTER_RESET"){
+    stepIndex=24;
+    Serial.println("ACK_PINSETTER_RESET");
+  } else Serial.println("ACK_UNKNOWN_COMMAND");
 }
 
 void checkInputChanges(){
@@ -1094,7 +1180,9 @@ void checkInputChanges(){
       int scoreMorePin=getScoreMorePin(inputPins[i]);
       if(scoreMorePin!=-1){
         Serial.print("INPUT_CHANGE:"); Serial.print(scoreMorePin); Serial.print(":"); Serial.println(currentState);
-      }
+      } else {
+        Serial.print("ACK_WRITE_INVALID_PIN:");Serial.println(scoreMorePin);
+      }    
     }
   }
 }
