@@ -26,7 +26,7 @@
 #include <AccelStepper.h>
 
 // 
-#define VERSION "1.1.0"
+#define VERSION "1.2.0"
 
 // =============== ScoreMore Serial ===============
 #define SCOREMORE_BAUD 9600
@@ -1078,18 +1078,41 @@ void checkSerial(){
   }
 }
 
+#define SPTR_SIZE 20
+char *strData = NULL;
+char *sPtr[SPTR_SIZE];
+size_t numberOfStr = 0;
+
+void freeData(char **pdata){
+  free(*pdata);
+  *pdata=NULL;
+  numberOfStr=0;
+}
+
+int separate (String &str, char **p, int size, char** pdata, char separator){
+  int n=0;
+  free(*pdata);
+  *pdata = strdup(str.c_str());
+  if(*pdata == NULL){
+    Serial.println("DEBUG:separate function OUT OF MEMORY");
+    return 0;
+  }
+  *p++ = strtok(*pdata,&separator);
+  for(n=1;NULL!=(*p++=strtok(NULL,&separator)); n++){
+    if (size == n) {
+      break;
+    }
+  }
+  return n;
+}  
+
+
 void handleCommand(String cmd){
   cmd.trim();
 
   if(cmd.startsWith("SET_INPUT:")){
     int scoreMorePin=cmd.substring(10).toInt();
     int pin=resolveArduinoPin(scoreMorePin);
-/*    Serial.print("LOG: cmd, ScoremorePin, pin"); 
-    Serial.print(cmd); 
-    Serial.print(",");
-    Serial.print(scoreMorePin);
-    Serial.print(",");
-    Serial.println(pin);*/
     if(pin!=-1) {
       if(!isTrackedInput(pin) && inputCount<maxPins){
         if(isBowlingPin(scoreMorePin)) pinMode(pin, INPUT_PULLUP); else pinMode(pin, INPUT_PULLUP);
@@ -1161,11 +1184,21 @@ void handleCommand(String cmd){
     Serial.println("READY");
   } else if(cmd=="VERSION"){
     Serial.println(VERSION);
-  } else if(cmd=="PINSETTER_RESET"){
-    pinsetterResetRequested=true;
-    Serial.println("ACK_PINSETTER_RESET");
-  } else Serial.println("ACK_UNKNOWN_COMMAND");
-}
+  } else if(cmd.startsWith("PINSETTER:")){
+    char s[100];
+    int N=separate(cmd, sPtr, SPTR_SIZE,&strData, ':');
+    if(N>0){
+      Serial.println(sPtr[1]);
+      if (strcmp(sPtr[1],"RESET")==0) {
+        pinsetterResetRequested=true;
+        Serial.println("ACK_PINSETTER_RESET");
+      } else {
+        Serial.println("ACK_UNKNOWN_PINSETTER_COMMAND");
+      }
+    } else {
+      Serial.println("ACK_NO_PINSETTER_COMMAND_GIVEN");
+    }
+  } else {Serial.println("ACK_UNKNOWN_COMMAND");Serial.print("DEBUG: unknow command:");Serial.println(cmd);}}
 
 void checkInputChanges(){
   for(int i=0;i<inputCount;i++){
