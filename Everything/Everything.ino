@@ -1187,7 +1187,8 @@ void handleCommand(String cmd){
   } else if(cmd.startsWith("PINSETTER:")){
     char s[100];
     int N=separate(cmd, sPtr, SPTR_SIZE,&strData, ':');
-    if(N>0){
+    Serial.print("N=");Serial.println(N);
+    if(N>1){
       Serial.println(sPtr[1]);
       if (strcmp(sPtr[1],"RESET")==0) {
         pinsetterResetRequested=true;
@@ -1208,9 +1209,7 @@ void checkInputChanges(){
       int scoreMorePin=getScoreMorePin(inputPins[i]);
       if(scoreMorePin!=-1){
         Serial.print("INPUT_CHANGE:"); Serial.print(scoreMorePin); Serial.print(":"); Serial.println(currentState);
-      } else {
-        Serial.print("ACK_WRITE_INVALID_PIN:");Serial.println(scoreMorePin);
-      }    
+      }   
     }
   }
 }
