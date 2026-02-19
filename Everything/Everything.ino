@@ -35,10 +35,10 @@
 // Current version, will be used by Scoremore to determine supported features
 #define VERSION "1.2.0"
 
-Adafruit_NeoPixel deckA(DECK_LED_LENGTH_L, DECK_PIN_A, NEO_GRB + NEO_KHZ800);
-Adafruit_NeoPixel deckB(DECK_LED_LENGTH_R, DECK_PIN_B, NEO_GRB + NEO_KHZ800);
-Adafruit_NeoPixel laneA(LANE_LED_LENGTH_L, LANE_PIN_A, NEO_GRB + NEO_KHZ800);
-Adafruit_NeoPixel laneB(LANE_LED_LENGTH_R, LANE_PIN_B, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel deckL(DECK_LED_LENGTH_L, DECK_PIN_L, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel deckR(DECK_LED_LENGTH_R, DECK_PIN_R, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel laneL(LANE_LED_LENGTH_L, LANE_PIN_L, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel laneR(LANE_LED_LENGTH_R, LANE_PIN_R, NEO_GRB + NEO_KHZ800);
 
 static inline uint32_t C_WHITE(Adafruit_NeoPixel &s){ return s.Color(255,255,255); }
 static inline uint32_t C_RED  (Adafruit_NeoPixel &s){ return s.Color(255,  0,  0); }
@@ -1058,8 +1058,8 @@ void handleCommand(String cmd){
             autoResetEdgeLatched = true;
             inFillBall = true;
 
-            for(int i=0;i<LANE_LED_LENGTH_L;i++) laneA.setPixelColor(i, C_GREEN(laneA));
-            for(int i=0;i<LANE_LED_LENGTH_R;i++) laneB.setPixelColor(i, C_GREEN(laneB));
+            for(int i=0;i<LANE_LED_LENGTH_L;i++) laneL.setPixelColor(i, C_GREEN(laneL));
+            for(int i=0;i<LANE_LED_LENGTH_R;i++) laneR.setPixelColor(i, C_GREEN(laneR));
             laneShowOnly();
 
             Serial.println("AUTO_RESET_FILL_BALL_ARMED (GREEN ON)");
@@ -1266,53 +1266,53 @@ void EmptyTurret() {
 
 // ======================= LED IMPL =======================
 void ledsBegin(){
-  deckA.begin(); deckB.begin(); laneA.begin(); laneB.begin();
-  deckA.setBrightness(DECK_LED_BRIGHTNESS);
-  deckB.setBrightness(DECK_LED_BRIGHTNESS);
-  laneA.setBrightness(LED_BRIGHTNESS_NORMAL);
-  laneB.setBrightness(LED_BRIGHTNESS_NORMAL);
+  deckL.begin(); deckR.begin(); laneL.begin(); laneR.begin();
+  deckL.setBrightness(DECK_LED_BRIGHTNESS);
+  deckR.setBrightness(DECK_LED_BRIGHTNESS);
+  laneL.setBrightness(LED_BRIGHTNESS_NORMAL);
+  laneR.setBrightness(LED_BRIGHTNESS_NORMAL);
   laneMode=LANE_IDLE_WHITE;
 }
 
 void deckAll(uint32_t col){
-  for(int i=0;i<DECK_LED_LENGTH_L;i++) deckA.setPixelColor(i,col);
-  for(int i=0;i<DECK_LED_LENGTH_R;i++) deckB.setPixelColor(i,col);
+  for(int i=0;i<DECK_LED_LENGTH_L;i++) deckL.setPixelColor(i,col);
+  for(int i=0;i<DECK_LED_LENGTH_R;i++) deckR.setPixelColor(i,col);
 }
 void laneAll(uint32_t col){
-  for(int i=0;i<LANE_LED_LENGTH_L;i++) laneA.setPixelColor(i,col);
-  for(int i=0;i<LANE_LED_LENGTH_R;i++) laneB.setPixelColor(i,col);
+  for(int i=0;i<LANE_LED_LENGTH_L;i++) laneL.setPixelColor(i,col);
+  for(int i=0;i<LANE_LED_LENGTH_R;i++) laneR.setPixelColor(i,col);
 }
-void ledsShowAll(){ deckA.show(); deckB.show(); laneA.show(); laneB.show(); }
-void laneShowOnly(){ laneA.show(); laneB.show(); }
+void ledsShowAll(){ deckL.show(); deckR.show(); laneL.show(); laneR.show(); }
+void laneShowOnly(){ laneL.show(); laneR.show(); }
 
 // ---- STRIKE EFFECTS ----
 void startStrikeWipe(){
   if(scoreWindowActive) return;
   lanePauseArmed=true;
-  laneA.setBrightness(LED_BRIGHTNESS_STRIKE);
-  laneB.setBrightness(LED_BRIGHTNESS_STRIKE);
+  laneL.setBrightness(LED_BRIGHTNESS_STRIKE);
+  laneR.setBrightness(LED_BRIGHTNESS_STRIKE);
   strikeWipeStartMs=millis(); strikeLastFrameMs=0; laneMode=LANE_STRIKE_WIPE;
 }
 
 void startStrikeFlash(){
   if(scoreWindowActive) return;
   flashOnPhase=true; flashCycles=0; flashLastMs=millis(); laneMode=LANE_STRIKE_FLASH;
-  uint32_t redA=C_RED(laneA), redB=C_RED(laneB);
-  for(int i=0;i<LANE_LED_LENGTH_L;i++) laneA.setPixelColor(i,redA);
-  for(int i=0;i<LANE_LED_LENGTH_R;i++) laneB.setPixelColor(i,redB);
+  uint32_t redL=C_RED(laneL), redR=C_RED(laneR);
+  for(int i=0;i<LANE_LED_LENGTH_L;i++) laneL.setPixelColor(i,redL);
+  for(int i=0;i<LANE_LED_LENGTH_R;i++) laneR.setPixelColor(i,redR);
   laneShowOnly();
 }
 
 void startBallCometImmediate(){
   lanePauseArmed=true;
-  laneAll(C_OFF(laneA)); laneShowOnly();
+  laneAll(C_OFF(laneL)); laneShowOnly();
   ballCometStartMs=millis(); ballCometLastFrame=0; laneMode=LANE_BALL_COMET;
 }
 
 void endAllLaneAnimsToWhite(){
-  laneAll(C_WHITE(laneA)); laneShowOnly(); laneMode=LANE_IDLE_WHITE;
-  laneA.setBrightness(LED_BRIGHTNESS_NORMAL);
-  laneB.setBrightness(LED_BRIGHTNESS_NORMAL);
+  laneAll(C_WHITE(laneL)); laneShowOnly(); laneMode=LANE_IDLE_WHITE;
+  laneL.setBrightness(LED_BRIGHTNESS_NORMAL);
+  laneR.setBrightness(LED_BRIGHTNESS_NORMAL);
   lanePaused=false; lanePauseArmed=false;
 }
 
@@ -1328,11 +1328,11 @@ void laneUpdate(){
       strikeLastFrameMs=now;
       float t=(float)elapsed/(float)STRIKE_WIPE_MS;
       int n1=(int)(t*LANE_LED_LENGTH_L+0.5f), n2=(int)(t*LANE_LED_LENGTH_R+0.5f);
-      uint32_t redA=C_RED(laneA), redB=C_RED(laneB);
+      uint32_t redL=C_RED(laneL), redR=C_RED(laneR);
       for(int i=0;i<LANE_LED_LENGTH_L;i++)
-        laneA.setPixelColor(i,(i<n1)?redA:C_WHITE(laneA));
+        laneL.setPixelColor(i,(i<n1)?redL:C_WHITE(laneL));
       for(int i=0;i<LANE_LED_LENGTH_R;i++)
-        laneB.setPixelColor(i,(i<n2)?redB:C_WHITE(laneB));
+        laneR.setPixelColor(i,(i<n2)?redR:C_WHITE(laneR));
       laneShowOnly();
     }
   }
@@ -1343,7 +1343,7 @@ void laneUpdate(){
       if(now - flashLastMs >= FLASH_ON_MS){
         flashOnPhase=false; 
         flashLastMs=now;
-        laneAll(C_WHITE(laneA)); 
+        laneAll(C_WHITE(laneL)); 
         laneShowOnly();
       }
     }else{
@@ -1355,9 +1355,9 @@ void laneUpdate(){
           endAllLaneAnimsToWhite();
         }else{
           flashOnPhase=true; 
-          uint32_t redA=C_RED(laneA), redB=C_RED(laneB);
-          for(int i=0;i<LANE_LED_LENGTH_L;i++) laneA.setPixelColor(i,redA);
-          for(int i=0;i<LANE_LED_LENGTH_R;i++) laneB.setPixelColor(i,redB);
+          uint32_t redL=C_RED(laneL), redR=C_RED(laneR);
+          for(int i=0;i<LANE_LED_LENGTH_L;i++) laneL.setPixelColor(i,redL);
+          for(int i=0;i<LANE_LED_LENGTH_R;i++) laneR.setPixelColor(i,redR);
           laneShowOnly();
         }
       }
@@ -1374,16 +1374,16 @@ void laneUpdate(){
     if(now - ballCometLastFrame >= BALL_COMET_FRAME_MS){
       ballCometLastFrame=now;
       float t=(float)elapsed/(float)BALL_COMET_MS;
-      int maxIndexA=LANE_LED_LENGTH_L+COMET_LEN, maxIndexB=LANE_LED_LENGTH_R+COMET_LEN;
-      int headA=(int)(t*maxIndexA+0.5f), headB=(int)(t*maxIndexB+0.5f);
+      int maxIndexL=LANE_LED_LENGTH_L+COMET_LEN, maxIndexR=LANE_LED_LENGTH_R+COMET_LEN;
+      int headL=(int)(t*maxIndexL+0.5f), headR=(int)(t*maxIndexR+0.5f);
 
-      for(int i=0;i<LANE_LED_LENGTH_L;i++) laneA.setPixelColor(i,C_OFF(laneA));
-      for(int i=0;i<LANE_LED_LENGTH_R;i++) laneB.setPixelColor(i,C_OFF(laneB));
+      for(int i=0;i<LANE_LED_LENGTH_L;i++) laneL.setPixelColor(i,C_OFF(laneL));
+      for(int i=0;i<LANE_LED_LENGTH_R;i++) laneR.setPixelColor(i,C_OFF(laneR));
 
       for(int k=0;k<COMET_LEN;k++){
-        int idxA=headA-k, idxB=headB-k;
-        if(idxA>=0 && idxA<LANE_LED_LENGTH_L) laneA.setPixelColor(idxA,C_WHITE(laneA));
-        if(idxB>=0 && idxB<LANE_LED_LENGTH_R) laneB.setPixelColor(idxB,C_WHITE(laneB));
+        int idxL=headL-k, idxR=headR-k;
+        if(idxL>=0 && idxL<LANE_LED_LENGTH_L) laneL.setPixelColor(idxL,C_WHITE(laneL));
+        if(idxR>=0 && idxR<LANE_LED_LENGTH_R) laneR.setPixelColor(idxR,C_WHITE(laneR));
       }
       laneShowOnly();
     }
@@ -1391,16 +1391,16 @@ void laneUpdate(){
 }
 
 void startupWipeWhiteQuick(){
-  deckAll(C_OFF(deckA)); laneAll(C_OFF(laneA)); ledsShowAll();
+  deckAll(C_OFF(deckL)); laneAll(C_OFF(laneL)); ledsShowAll();
   int maxLen=LANE_LED_LENGTH_L;
   if(LANE_LED_LENGTH_R>maxLen) maxLen=LANE_LED_LENGTH_R;
   if(DECK_LED_LENGTH_L>maxLen) maxLen=DECK_LED_LENGTH_L;
   if(DECK_LED_LENGTH_R>maxLen) maxLen=DECK_LED_LENGTH_R;
   for(int i=0;i<maxLen;i++){
-    if(i<DECK_LED_LENGTH_L) deckA.setPixelColor(i,C_WHITE(deckA));
-    if(i<DECK_LED_LENGTH_R) deckB.setPixelColor(i,C_WHITE(deckB));
-    if(i<LANE_LED_LENGTH_L) laneA.setPixelColor(i,C_WHITE(laneA));
-    if(i<LANE_LED_LENGTH_R) laneB.setPixelColor(i,C_WHITE(laneB));
+    if(i<DECK_LED_LENGTH_L) deckL.setPixelColor(i,C_WHITE(deckL));
+    if(i<DECK_LED_LENGTH_R) deckR.setPixelColor(i,C_WHITE(deckR));
+    if(i<LANE_LED_LENGTH_L) laneL.setPixelColor(i,C_WHITE(laneL));
+    if(i<LANE_LED_LENGTH_R) laneR.setPixelColor(i,C_WHITE(laneR));
     ledsShowAll(); delay(STARTUP_WIPE_MS_PER_STEP);
   }
   frameLEDsFirstHalf();
@@ -1437,8 +1437,8 @@ static inline bool isReadyIdleForPause(){
 
 void setAllLightsRed(){
   // Force solid red everywhere (deck + lane)
-  deckAll(C_RED(deckA));
-  laneAll(C_RED(laneA));
+  deckAll(C_RED(deckL));
+  laneAll(C_RED(laneL));
   ledsShowAll();
 
   // Stop lane animations so laneUpdate() doesn't overwrite the solid red
@@ -1446,21 +1446,21 @@ void setAllLightsRed(){
   lanePaused = false;
   lanePauseArmed = false;
 
-  laneA.setBrightness(LED_BRIGHTNESS_NORMAL);
-  laneB.setBrightness(LED_BRIGHTNESS_NORMAL);
+  laneL.setBrightness(LED_BRIGHTNESS_NORMAL);
+  laneR.setBrightness(LED_BRIGHTNESS_NORMAL);
 }
 
 void setAllLightsWhite(){
-  deckAll(C_WHITE(deckA));
-  laneAll(C_WHITE(laneA));
+  deckAll(C_WHITE(deckL));
+  laneAll(C_WHITE(laneL));
   ledsShowAll();
 
   laneMode = LANE_IDLE_WHITE;
   lanePaused = false;
   lanePauseArmed = false;
 
-  laneA.setBrightness(LED_BRIGHTNESS_NORMAL);
-  laneB.setBrightness(LED_BRIGHTNESS_NORMAL);
+  laneL.setBrightness(LED_BRIGHTNESS_NORMAL);
+  laneR.setBrightness(LED_BRIGHTNESS_NORMAL);
 }
 
 void enterPauseMode(){

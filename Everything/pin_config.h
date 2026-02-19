@@ -55,10 +55,10 @@
 // =====================================================
 // NEOPIXEL LED STRIP PINS
 // =====================================================
-#define DECK_PIN_A          50  // Left deck
-#define DECK_PIN_B          51  // Right deck
-#define LANE_PIN_A          52  // Left lane
-#define LANE_PIN_B          53  // Right lane
+#define DECK_PIN_L          50  // Left deck
+#define DECK_PIN_R          51  // Right deck
+#define LANE_PIN_L          52  // Left lane
+#define LANE_PIN_R          53  // Right lane
 
 // =====================================================
 // SCOREMORE LOGICAL PIN MAPPING

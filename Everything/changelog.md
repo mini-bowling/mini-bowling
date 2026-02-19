@@ -2,6 +2,10 @@
 
 ## Version 1.2.0 - 2026-02-18
 
+### Changed
+- Renamed LED strip pin defines from A/B to L/R (`DECK_PIN_A`→`DECK_PIN_L`, `DECK_PIN_B`→`DECK_PIN_R`, `LANE_PIN_A`→`LANE_PIN_L`, `LANE_PIN_B`→`LANE_PIN_R`) for consistency with config values that already use L/R naming
+- Renamed NeoPixel objects from A/B to L/R (`deckA`→`deckL`, `deckB`→`deckR`, `laneA`→`laneL`, `laneB`→`laneR`)
+
 ### Added
 - `pin_config.h` — hardware pin assignments extracted from inline defines, matching the test script pattern
 - `general_config.h` — all user-adjustable settings (servo angles, LED lengths, timing constants) extracted into a shared config file

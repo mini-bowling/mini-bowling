@@ -39,10 +39,10 @@ Servo BallReturnServo;
 AccelStepper stepper(1, STEP_PIN, DIR_PIN);
 
 // NeoPixels
-Adafruit_NeoPixel deckA(DECK_LED_LENGTH_L, DECK_PIN_A, NEO_GRB + NEO_KHZ800);
-Adafruit_NeoPixel deckB(DECK_LED_LENGTH_R, DECK_PIN_B, NEO_GRB + NEO_KHZ800);
-Adafruit_NeoPixel laneA(LANE_LED_LENGTH_L, LANE_PIN_A, NEO_GRB + NEO_KHZ800);
-Adafruit_NeoPixel laneB(LANE_LED_LENGTH_R, LANE_PIN_B, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel deckL(DECK_LED_LENGTH_L, DECK_PIN_L, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel deckR(DECK_LED_LENGTH_R, DECK_PIN_R, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel laneL(LANE_LED_LENGTH_L, LANE_PIN_L, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel laneR(LANE_LED_LENGTH_R, LANE_PIN_R, NEO_GRB + NEO_KHZ800);
 
 // =====================================================
 // MENU STATE
@@ -259,14 +259,14 @@ bool frameBlinkState = false;
 // =====================================================
 
 // Color helpers
-uint32_t C_WHITE() { return deckA.Color(255, 255, 255); }
-uint32_t C_RED()   { return deckA.Color(255, 0, 0); }
-uint32_t C_GREEN() { return deckA.Color(0, 255, 0); }
-uint32_t C_BLUE()  { return deckA.Color(0, 0, 255); }
-uint32_t C_YELLOW(){ return deckA.Color(255, 255, 0); }
-uint32_t C_PURPLE(){ return deckA.Color(128, 0, 128); }
-uint32_t C_ORANGE(){ return deckA.Color(255, 165, 0); }
-uint32_t C_OFF()   { return deckA.Color(0, 0, 0); }
+uint32_t C_WHITE() { return deckL.Color(255, 255, 255); }
+uint32_t C_RED()   { return deckL.Color(255, 0, 0); }
+uint32_t C_GREEN() { return deckL.Color(0, 255, 0); }
+uint32_t C_BLUE()  { return deckL.Color(0, 0, 255); }
+uint32_t C_YELLOW(){ return deckL.Color(255, 255, 0); }
+uint32_t C_PURPLE(){ return deckL.Color(128, 0, 128); }
+uint32_t C_ORANGE(){ return deckL.Color(255, 165, 0); }
+uint32_t C_OFF()   { return deckL.Color(0, 0, 0); }
 
 void ConveyorOn()  { digitalWrite(MOTOR_RELAY_PIN, CONVEYOR_ACTIVE_HIGH ? HIGH : LOW); }
 void ConveyorOff() { digitalWrite(MOTOR_RELAY_PIN, CONVEYOR_ACTIVE_HIGH ? LOW : HIGH); }
@@ -421,14 +421,14 @@ void setup() {
 #endif
 
   // Initialize NeoPixels (start OFF)
-  deckA.begin();
-  deckB.begin();
-  laneA.begin();
-  laneB.begin();
-  deckA.setBrightness(DECK_LED_BRIGHTNESS);
-  deckB.setBrightness(DECK_LED_BRIGHTNESS);
-  laneA.setBrightness(LED_BRIGHTNESS_NORMAL);
-  laneB.setBrightness(LED_BRIGHTNESS_NORMAL);
+  deckL.begin();
+  deckR.begin();
+  laneL.begin();
+  laneR.begin();
+  deckL.setBrightness(DECK_LED_BRIGHTNESS);
+  deckR.setBrightness(DECK_LED_BRIGHTNESS);
+  laneL.setBrightness(LED_BRIGHTNESS_NORMAL);
+  laneR.setBrightness(LED_BRIGHTNESS_NORMAL);
 
   // All LEDs off
   deckAll(C_OFF());
@@ -1341,7 +1341,7 @@ void handleLaneLEDMenu(String cmd) {
     Serial.print(F("Color: "));
     Serial.print(laneColorName);
     Serial.print(F(", Brightness: "));
-    Serial.print(laneA.getBrightness());
+    Serial.print(laneL.getBrightness());
     Serial.print(F(", Target: "));
     Serial.println(getStripSelectName(laneStripSelect));
   }
@@ -1504,7 +1504,7 @@ void handleDeckLEDMenu(String cmd) {
     Serial.print(F("Color: "));
     Serial.print(deckColorName);
     Serial.print(F(", Brightness: "));
-    Serial.print(deckA.getBrightness());
+    Serial.print(deckL.getBrightness());
     Serial.print(F(", Target: "));
     Serial.println(getStripSelectName(deckStripSelect));
   }
@@ -2743,20 +2743,20 @@ void updateFrameBlink() {
 // Set all pixels on both deck strips
 void deckAll(uint32_t col) {
   for (int i = 0; i < DECK_LED_LENGTH_L; i++) {
-    deckA.setPixelColor(i, col);
+    deckL.setPixelColor(i, col);
   }
   for (int i = 0; i < DECK_LED_LENGTH_R; i++) {
-    deckB.setPixelColor(i, col);
+    deckR.setPixelColor(i, col);
   }
 }
 
 // Set all pixels on both lane strips
 void laneAll(uint32_t col) {
   for (int i = 0; i < LANE_LED_LENGTH_L; i++) {
-    laneA.setPixelColor(i, col);
+    laneL.setPixelColor(i, col);
   }
   for (int i = 0; i < LANE_LED_LENGTH_R; i++) {
-    laneB.setPixelColor(i, col);
+    laneR.setPixelColor(i, col);
   }
 }
 
@@ -2764,12 +2764,12 @@ void laneAll(uint32_t col) {
 void deckSetColor(uint32_t col) {
   if (deckStripSelect == STRIP_BOTH || deckStripSelect == STRIP_LEFT) {
     for (int i = 0; i < DECK_LED_LENGTH_L; i++) {
-      deckA.setPixelColor(i, col);
+      deckL.setPixelColor(i, col);
     }
   }
   if (deckStripSelect == STRIP_BOTH || deckStripSelect == STRIP_RIGHT) {
     for (int i = 0; i < DECK_LED_LENGTH_R; i++) {
-      deckB.setPixelColor(i, col);
+      deckR.setPixelColor(i, col);
     }
   }
 }
@@ -2778,65 +2778,65 @@ void deckSetColor(uint32_t col) {
 void laneSetColor(uint32_t col) {
   if (laneStripSelect == STRIP_BOTH || laneStripSelect == STRIP_LEFT) {
     for (int i = 0; i < LANE_LED_LENGTH_L; i++) {
-      laneA.setPixelColor(i, col);
+      laneL.setPixelColor(i, col);
     }
   }
   if (laneStripSelect == STRIP_BOTH || laneStripSelect == STRIP_RIGHT) {
     for (int i = 0; i < LANE_LED_LENGTH_R; i++) {
-      laneB.setPixelColor(i, col);
+      laneR.setPixelColor(i, col);
     }
   }
 }
 
 // Show both deck strips
 void deckShow() {
-  deckA.show();
-  deckB.show();
+  deckL.show();
+  deckR.show();
 }
 
 // Show both lane strips
 void laneShow() {
-  laneA.show();
-  laneB.show();
+  laneL.show();
+  laneR.show();
 }
 
 // Show selected deck strip(s)
 void deckShowSelected() {
   if (deckStripSelect == STRIP_BOTH || deckStripSelect == STRIP_LEFT) {
-    deckA.show();
+    deckL.show();
   }
   if (deckStripSelect == STRIP_BOTH || deckStripSelect == STRIP_RIGHT) {
-    deckB.show();
+    deckR.show();
   }
 }
 
 // Show selected lane strip(s)
 void laneShowSelected() {
   if (laneStripSelect == STRIP_BOTH || laneStripSelect == STRIP_LEFT) {
-    laneA.show();
+    laneL.show();
   }
   if (laneStripSelect == STRIP_BOTH || laneStripSelect == STRIP_RIGHT) {
-    laneB.show();
+    laneR.show();
   }
 }
 
 // Set brightness for selected deck strip(s)
 void deckSetBrightnessSelected(uint8_t br) {
   if (deckStripSelect == STRIP_BOTH || deckStripSelect == STRIP_LEFT) {
-    deckA.setBrightness(br);
+    deckL.setBrightness(br);
   }
   if (deckStripSelect == STRIP_BOTH || deckStripSelect == STRIP_RIGHT) {
-    deckB.setBrightness(br);
+    deckR.setBrightness(br);
   }
 }
 
 // Set brightness for selected lane strip(s)
 void laneSetBrightnessSelected(uint8_t br) {
   if (laneStripSelect == STRIP_BOTH || laneStripSelect == STRIP_LEFT) {
-    laneA.setBrightness(br);
+    laneL.setBrightness(br);
   }
   if (laneStripSelect == STRIP_BOTH || laneStripSelect == STRIP_RIGHT) {
-    laneB.setBrightness(br);
+    laneR.setBrightness(br);
   }
 }
 
@@ -2935,24 +2935,24 @@ void updateLEDAnimation() {
       if (ledAnimTarget == LED_DECK) {
         if (currentSelect == STRIP_BOTH || currentSelect == STRIP_LEFT) {
           for (int i = 0; i < lenL; i++) {
-            deckA.setPixelColor(i, (i < nL) ? animColor : C_OFF());
+            deckL.setPixelColor(i, (i < nL) ? animColor : C_OFF());
           }
         }
         if (currentSelect == STRIP_BOTH || currentSelect == STRIP_RIGHT) {
           for (int i = 0; i < lenR; i++) {
-            deckB.setPixelColor(i, (i < nR) ? animColor : C_OFF());
+            deckR.setPixelColor(i, (i < nR) ? animColor : C_OFF());
           }
         }
         deckShowSelected();
       } else {
         if (currentSelect == STRIP_BOTH || currentSelect == STRIP_LEFT) {
           for (int i = 0; i < lenL; i++) {
-            laneA.setPixelColor(i, (i < nL) ? animColor : C_OFF());
+            laneL.setPixelColor(i, (i < nL) ? animColor : C_OFF());
           }
         }
         if (currentSelect == STRIP_BOTH || currentSelect == STRIP_RIGHT) {
           for (int i = 0; i < lenR; i++) {
-            laneB.setPixelColor(i, (i < nR) ? animColor : C_OFF());
+            laneR.setPixelColor(i, (i < nR) ? animColor : C_OFF());
           }
         }
         laneShowSelected();
@@ -3029,17 +3029,17 @@ void updateLEDAnimation() {
         deckSetColor(C_OFF());
         for (int k = 0; k < COMET_LEN; k++) {
           uint8_t br = 255 - (k * 60);
-          uint32_t col = deckA.Color(br, br, br);
+          uint32_t col = deckL.Color(br, br, br);
           if (currentSelect == STRIP_BOTH || currentSelect == STRIP_LEFT) {
             int idx = headL - k;
             if (idx >= 0 && idx < lenL) {
-              deckA.setPixelColor(idx, col);
+              deckL.setPixelColor(idx, col);
             }
           }
           if (currentSelect == STRIP_BOTH || currentSelect == STRIP_RIGHT) {
             int idx = headR - k;
             if (idx >= 0 && idx < lenR) {
-              deckB.setPixelColor(idx, col);
+              deckR.setPixelColor(idx, col);
             }
           }
         }
@@ -3048,17 +3048,17 @@ void updateLEDAnimation() {
         laneSetColor(C_OFF());
         for (int k = 0; k < COMET_LEN; k++) {
           uint8_t br = 255 - (k * 60);
-          uint32_t col = laneA.Color(br, br, br);
+          uint32_t col = laneL.Color(br, br, br);
           if (currentSelect == STRIP_BOTH || currentSelect == STRIP_LEFT) {
             int idx = headL - k;
             if (idx >= 0 && idx < lenL) {
-              laneA.setPixelColor(idx, col);
+              laneL.setPixelColor(idx, col);
             }
           }
           if (currentSelect == STRIP_BOTH || currentSelect == STRIP_RIGHT) {
             int idx = headR - k;
             if (idx >= 0 && idx < lenR) {
-              laneB.setPixelColor(idx, col);
+              laneR.setPixelColor(idx, col);
             }
           }
         }
@@ -3075,24 +3075,24 @@ void updateLEDAnimation() {
       if (ledAnimTarget == LED_DECK) {
         if (currentSelect == STRIP_BOTH || currentSelect == STRIP_LEFT) {
           for (int i = 0; i < lenL; i++) {
-            deckA.setPixelColor(i, wheel((i + rainbowOffset) & 255));
+            deckL.setPixelColor(i, wheel((i + rainbowOffset) & 255));
           }
         }
         if (currentSelect == STRIP_BOTH || currentSelect == STRIP_RIGHT) {
           for (int i = 0; i < lenR; i++) {
-            deckB.setPixelColor(i, wheel((i + rainbowOffset) & 255));
+            deckR.setPixelColor(i, wheel((i + rainbowOffset) & 255));
           }
         }
         deckShowSelected();
       } else {
         if (currentSelect == STRIP_BOTH || currentSelect == STRIP_LEFT) {
           for (int i = 0; i < lenL; i++) {
-            laneA.setPixelColor(i, wheel((i + rainbowOffset) & 255));
+            laneL.setPixelColor(i, wheel((i + rainbowOffset) & 255));
           }
         }
         if (currentSelect == STRIP_BOTH || currentSelect == STRIP_RIGHT) {
           for (int i = 0; i < lenR; i++) {
-            laneB.setPixelColor(i, wheel((i + rainbowOffset) & 255));
+            laneR.setPixelColor(i, wheel((i + rainbowOffset) & 255));
           }
         }
         laneShowSelected();
@@ -3105,12 +3105,12 @@ void updateLEDAnimation() {
 uint32_t wheel(byte wheelPos) {
   wheelPos = 255 - wheelPos;
   if (wheelPos < 85) {
-    return deckA.Color(255 - wheelPos * 3, 0, wheelPos * 3);
+    return deckL.Color(255 - wheelPos * 3, 0, wheelPos * 3);
   }
   if (wheelPos < 170) {
     wheelPos -= 85;
-    return deckA.Color(0, wheelPos * 3, 255 - wheelPos * 3);
+    return deckL.Color(0, wheelPos * 3, 255 - wheelPos * 3);
   }
   wheelPos -= 170;
-  return deckA.Color(wheelPos * 3, 255 - wheelPos * 3, 0);
+  return deckL.Color(wheelPos * 3, 255 - wheelPos * 3, 0);
 }

@@ -2,6 +2,12 @@
 
 All notable changes to the Master Test Script will be documented in this file.
 
+## [v1.4.1] - 2026-02-18
+
+### Changed
+- Renamed LED strip pin defines from A/B to L/R (`DECK_PIN_A`→`DECK_PIN_L`, `DECK_PIN_B`→`DECK_PIN_R`, `LANE_PIN_A`→`LANE_PIN_L`, `LANE_PIN_B`→`LANE_PIN_R`) for consistency with config values that already use L/R naming
+- Renamed NeoPixel objects from A/B to L/R (`deckA`→`deckL`, `deckB`→`deckR`, `laneA`→`laneL`, `laneB`→`laneR`)
+
 ## [v1.4] - 2026-02-03
 
 ### Added
