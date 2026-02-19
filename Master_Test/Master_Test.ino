@@ -11,8 +11,16 @@
 #include <AccelStepper.h>
 
 // Configuration files
-#include "pin_config.h"
-#include "user_config.h"
+#if __has_include("pin_config.user.h")
+  #include "pin_config.user.h"
+#else
+  #include "pin_config.h"
+#endif
+#if __has_include("general_config.user.h")
+  #include "general_config.user.h"
+#else
+  #include "general_config.h"
+#endif
 
 // =====================================================
 // OBJECTS
@@ -31,10 +39,10 @@ Servo BallReturnServo;
 AccelStepper stepper(1, STEP_PIN, DIR_PIN);
 
 // NeoPixels
-Adafruit_NeoPixel deckA(DECK_LED_LENGTH_L, DECK_PIN_A, NEO_GRB + NEO_KHZ800);
-Adafruit_NeoPixel deckB(DECK_LED_LENGTH_R, DECK_PIN_B, NEO_GRB + NEO_KHZ800);
-Adafruit_NeoPixel laneA(LANE_LED_LENGTH_L, LANE_PIN_A, NEO_GRB + NEO_KHZ800);
-Adafruit_NeoPixel laneB(LANE_LED_LENGTH_R, LANE_PIN_B, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel deckL(DECK_LED_LENGTH_L, DECK_PIN_L, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel deckR(DECK_LED_LENGTH_R, DECK_PIN_R, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel laneL(LANE_LED_LENGTH_L, LANE_PIN_L, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel laneR(LANE_LED_LENGTH_R, LANE_PIN_R, NEO_GRB + NEO_KHZ800);
 
 // =====================================================
 // MENU STATE
@@ -98,8 +106,8 @@ unsigned long sweepDurationMs = SWEEP_TWEEN_MS;
 bool sweepAnimating = false;
 
 // Raise positions (initialized from config)
-int raiseLeftPos = RAISE_DROP_ANGLE_L;
-int raiseRightPos = RAISE_DROP_ANGLE_R;
+int raiseLeftPos = RAISE_DROP_ANGLE;
+int raiseRightPos = 180 - RAISE_DROP_ANGLE;
 
 // Additional tracking for status
 bool conveyorIsOn = false;
@@ -251,14 +259,14 @@ bool frameBlinkState = false;
 // =====================================================
 
 // Color helpers
-uint32_t C_WHITE() { return deckA.Color(255, 255, 255); }
-uint32_t C_RED()   { return deckA.Color(255, 0, 0); }
-uint32_t C_GREEN() { return deckA.Color(0, 255, 0); }
-uint32_t C_BLUE()  { return deckA.Color(0, 0, 255); }
-uint32_t C_YELLOW(){ return deckA.Color(255, 255, 0); }
-uint32_t C_PURPLE(){ return deckA.Color(128, 0, 128); }
-uint32_t C_ORANGE(){ return deckA.Color(255, 165, 0); }
-uint32_t C_OFF()   { return deckA.Color(0, 0, 0); }
+uint32_t C_WHITE() { return deckL.Color(255, 255, 255); }
+uint32_t C_RED()   { return deckL.Color(255, 0, 0); }
+uint32_t C_GREEN() { return deckL.Color(0, 255, 0); }
+uint32_t C_BLUE()  { return deckL.Color(0, 0, 255); }
+uint32_t C_YELLOW(){ return deckL.Color(255, 255, 0); }
+uint32_t C_PURPLE(){ return deckL.Color(128, 0, 128); }
+uint32_t C_ORANGE(){ return deckL.Color(255, 165, 0); }
+uint32_t C_OFF()   { return deckL.Color(0, 0, 0); }
 
 void ConveyorOn()  { digitalWrite(MOTOR_RELAY_PIN, CONVEYOR_ACTIVE_HIGH ? HIGH : LOW); }
 void ConveyorOff() { digitalWrite(MOTOR_RELAY_PIN, CONVEYOR_ACTIVE_HIGH ? LOW : HIGH); }
@@ -413,14 +421,14 @@ void setup() {
 #endif
 
   // Initialize NeoPixels (start OFF)
-  deckA.begin();
-  deckB.begin();
-  laneA.begin();
-  laneB.begin();
-  deckA.setBrightness(LED_BRIGHTNESS_NORMAL);
-  deckB.setBrightness(LED_BRIGHTNESS_NORMAL);
-  laneA.setBrightness(LED_BRIGHTNESS_NORMAL);
-  laneB.setBrightness(LED_BRIGHTNESS_NORMAL);
+  deckL.begin();
+  deckR.begin();
+  laneL.begin();
+  laneR.begin();
+  deckL.setBrightness(DECK_LED_BRIGHTNESS);
+  deckR.setBrightness(DECK_LED_BRIGHTNESS);
+  laneL.setBrightness(LED_BRIGHTNESS_NORMAL);
+  laneR.setBrightness(LED_BRIGHTNESS_NORMAL);
 
   // All LEDs off
   deckAll(C_OFF());
@@ -1333,7 +1341,7 @@ void handleLaneLEDMenu(String cmd) {
     Serial.print(F("Color: "));
     Serial.print(laneColorName);
     Serial.print(F(", Brightness: "));
-    Serial.print(laneA.getBrightness());
+    Serial.print(laneL.getBrightness());
     Serial.print(F(", Target: "));
     Serial.println(getStripSelectName(laneStripSelect));
   }
@@ -1479,7 +1487,7 @@ void handleDeckLEDMenu(String cmd) {
   }
   else if (cmd == "stop" || cmd == "x") {
     animMode = ANIM_IDLE;
-    deckSetBrightnessSelected(LED_BRIGHTNESS_NORMAL);
+    deckSetBrightnessSelected(DECK_LED_BRIGHTNESS);
     deckSetColor(currentDeckColor);
     deckShowSelected();
     Serial.println(F(">> Animation stopped"));
@@ -1496,7 +1504,7 @@ void handleDeckLEDMenu(String cmd) {
     Serial.print(F("Color: "));
     Serial.print(deckColorName);
     Serial.print(F(", Brightness: "));
-    Serial.print(deckA.getBrightness());
+    Serial.print(deckL.getBrightness());
     Serial.print(F(", Target: "));
     Serial.println(getStripSelectName(deckStripSelect));
   }
@@ -1741,29 +1749,29 @@ void printRaiseMenu() {
   Serial.println(F("===== RAISE TEST (pins 9,10) ====="));
   Serial.println(F("Presets (both servos move together):"));
   Serial.print(F("  home (ho)- Home/Up (L="));
-  Serial.print(RAISE_UP_ANGLE_L);
+  Serial.print(RAISE_UP_ANGLE);
   Serial.print(F(", R="));
-  Serial.print(RAISE_UP_ANGLE_R);
+  Serial.print(180 - RAISE_UP_ANGLE);
   Serial.println(F(")"));
   Serial.print(F("  up (u)   - Up position (L="));
-  Serial.print(RAISE_UP_ANGLE_L);
+  Serial.print(RAISE_UP_ANGLE);
   Serial.print(F(", R="));
-  Serial.print(RAISE_UP_ANGLE_R);
+  Serial.print(180 - RAISE_UP_ANGLE);
   Serial.println(F(")"));
   Serial.print(F("  down (d) - Down/Set (L="));
-  Serial.print(RAISE_DOWN_ANGLE_L);
+  Serial.print(RAISE_DOWN_ANGLE);
   Serial.print(F(", R="));
-  Serial.print(RAISE_DOWN_ANGLE_R);
+  Serial.print(180 - RAISE_DOWN_ANGLE);
   Serial.println(F(")"));
   Serial.print(F("  grab (g) - Grab (L="));
-  Serial.print(RAISE_GRAB_ANGLE_L);
+  Serial.print(RAISE_GRAB_ANGLE);
   Serial.print(F(", R="));
-  Serial.print(RAISE_GRAB_ANGLE_R);
+  Serial.print(180 - RAISE_GRAB_ANGLE);
   Serial.println(F(")"));
   Serial.print(F("  drop (dr)- Drop (L="));
-  Serial.print(RAISE_DROP_ANGLE_L);
+  Serial.print(RAISE_DROP_ANGLE);
   Serial.print(F(", R="));
-  Serial.print(RAISE_DROP_ANGLE_R);
+  Serial.print(180 - RAISE_DROP_ANGLE);
   Serial.println(F(")"));
   Serial.println(F(""));
   Serial.println(F("Custom angle:"));
@@ -1779,8 +1787,8 @@ void printRaiseMenu() {
 void handleRaiseMenu(String cmd) {
   if (cmd == "home" || cmd == "ho") {
     ensureRaiseAttached();
-    raiseLeftPos = RAISE_UP_ANGLE_L;
-    raiseRightPos = RAISE_UP_ANGLE_R;
+    raiseLeftPos = RAISE_UP_ANGLE;
+    raiseRightPos = 180 - RAISE_UP_ANGLE;
     LeftRaiseServo.write(raiseLeftPos);
     RightRaiseServo.write(raiseRightPos);
     Serial.print(F(">> HOME (L="));
@@ -1791,8 +1799,8 @@ void handleRaiseMenu(String cmd) {
   }
   else if (cmd == "up" || cmd == "u") {
     ensureRaiseAttached();
-    raiseLeftPos = RAISE_UP_ANGLE_L;
-    raiseRightPos = RAISE_UP_ANGLE_R;
+    raiseLeftPos = RAISE_UP_ANGLE;
+    raiseRightPos = 180 - RAISE_UP_ANGLE;
     LeftRaiseServo.write(raiseLeftPos);
     RightRaiseServo.write(raiseRightPos);
     Serial.print(F(">> UP (L="));
@@ -1803,8 +1811,8 @@ void handleRaiseMenu(String cmd) {
   }
   else if (cmd == "down" || cmd == "d") {
     ensureRaiseAttached();
-    raiseLeftPos = RAISE_DOWN_ANGLE_L;
-    raiseRightPos = RAISE_DOWN_ANGLE_R;
+    raiseLeftPos = RAISE_DOWN_ANGLE;
+    raiseRightPos = 180 - RAISE_DOWN_ANGLE;
     LeftRaiseServo.write(raiseLeftPos);
     RightRaiseServo.write(raiseRightPos);
     Serial.print(F(">> DOWN (L="));
@@ -1815,8 +1823,8 @@ void handleRaiseMenu(String cmd) {
   }
   else if (cmd == "grab" || cmd == "g") {
     ensureRaiseAttached();
-    raiseLeftPos = RAISE_GRAB_ANGLE_L;
-    raiseRightPos = RAISE_GRAB_ANGLE_R;
+    raiseLeftPos = RAISE_GRAB_ANGLE;
+    raiseRightPos = 180 - RAISE_GRAB_ANGLE;
     LeftRaiseServo.write(raiseLeftPos);
     RightRaiseServo.write(raiseRightPos);
     Serial.print(F(">> GRAB (L="));
@@ -1827,8 +1835,8 @@ void handleRaiseMenu(String cmd) {
   }
   else if (cmd == "drop" || cmd == "dr") {
     ensureRaiseAttached();
-    raiseLeftPos = RAISE_DROP_ANGLE_L;
-    raiseRightPos = RAISE_DROP_ANGLE_R;
+    raiseLeftPos = RAISE_DROP_ANGLE;
+    raiseRightPos = 180 - RAISE_DROP_ANGLE;
     LeftRaiseServo.write(raiseLeftPos);
     RightRaiseServo.write(raiseRightPos);
     Serial.print(F(">> DROP (L="));
@@ -2199,7 +2207,7 @@ void startSweepClear() {
   sweepClearActive = true;
 
   // Check if deck is already up
-  if (raiseLeftPos == RAISE_UP_ANGLE_L && raiseRightPos == RAISE_UP_ANGLE_R) {
+  if (raiseLeftPos == RAISE_UP_ANGLE && raiseRightPos == (180 - RAISE_UP_ANGLE)) {
     // Deck already up, skip raise
     Serial.println(F("   Phase: Sweep back"));
     startSweepTo(SWEEP_BACK_ANGLE, 180 - SWEEP_BACK_ANGLE);
@@ -2207,10 +2215,10 @@ void startSweepClear() {
   } else {
     Serial.println(F("   Phase: Raise deck up"));
     ensureRaiseAttached();
-    LeftRaiseServo.write(RAISE_UP_ANGLE_L);
-    RightRaiseServo.write(RAISE_UP_ANGLE_R);
-    raiseLeftPos = RAISE_UP_ANGLE_L;
-    raiseRightPos = RAISE_UP_ANGLE_R;
+    LeftRaiseServo.write(RAISE_UP_ANGLE);
+    RightRaiseServo.write(180 - RAISE_UP_ANGLE);
+    raiseLeftPos = RAISE_UP_ANGLE;
+    raiseRightPos = 180 - RAISE_UP_ANGLE;
     sweepClearPhaseMs = millis();
     sweepClearPhase = SCLEAR_RAISE_UP;
   }
@@ -2324,10 +2332,10 @@ void runPinDropFSM() {
     case PDROP_SCISSOR_OPEN:
       if (now - pinDropPhaseStartMs >= PDROP_SETTLE_MS) {
         Serial.println(F("   Phase: Raise to down/set position"));
-        LeftRaiseServo.write(RAISE_DOWN_ANGLE_L);
-        RightRaiseServo.write(RAISE_DOWN_ANGLE_R);
-        raiseLeftPos = RAISE_DOWN_ANGLE_L;
-        raiseRightPos = RAISE_DOWN_ANGLE_R;
+        LeftRaiseServo.write(RAISE_DOWN_ANGLE);
+        RightRaiseServo.write(180 - RAISE_DOWN_ANGLE);
+        raiseLeftPos = RAISE_DOWN_ANGLE;
+        raiseRightPos = 180 - RAISE_DOWN_ANGLE;
         pinDropPhaseStartMs = now;
         pinDropPhase = PDROP_RAISE_DOWN;
       }
@@ -2346,10 +2354,10 @@ void runPinDropFSM() {
     case PDROP_SLIDER_RELEASE:
       if (now - pinDropPhaseStartMs >= PDROP_DROP_MS) {
         Serial.println(F("   Phase: Raise up (slider still extended)"));
-        LeftRaiseServo.write(RAISE_UP_ANGLE_L);
-        RightRaiseServo.write(RAISE_UP_ANGLE_R);
-        raiseLeftPos = RAISE_UP_ANGLE_L;
-        raiseRightPos = RAISE_UP_ANGLE_R;
+        LeftRaiseServo.write(RAISE_UP_ANGLE);
+        RightRaiseServo.write(180 - RAISE_UP_ANGLE);
+        raiseLeftPos = RAISE_UP_ANGLE;
+        raiseRightPos = 180 - RAISE_UP_ANGLE;
         pinDropPhaseStartMs = now;
         pinDropPhase = PDROP_RAISE_UP;
       }
@@ -2521,7 +2529,7 @@ void runTurretLoadFSM() {
       break;
 
     case TLOAD_CATCH_DELAY:
-      if (now - tlPhaseStartMs >= TLOAD_CATCH_DELAY_MS) {
+      if (now - tlPhaseStartMs >= CATCH_DELAY_MS) {
         tlNowCatching++;
         Serial.print(F("   Advancing to slot "));
         Serial.println(tlNowCatching);
@@ -2541,7 +2549,7 @@ void runTurretLoadFSM() {
       break;
 
     case TLOAD_NINTH_SETTLE:
-      if (now - tlPhaseStartMs >= TLOAD_NINTH_SETTLE_MS) {
+      if (now - tlPhaseStartMs >= NINTH_SETTLE_MS) {
         Serial.println(F("   9 pins loaded. Waiting for 10th pin..."));
         tlQueuedPins = 0;
         tlPinArmed = true;  // Re-arm: if pin already blocking sensor, detect immediately
@@ -2579,7 +2587,7 @@ void runTurretLoadFSM() {
       break;
 
     case TLOAD_RELEASE_DWELL:
-      if (now - tlPhaseStartMs >= TLOAD_RELEASE_DWELL_MS) {
+      if (now - tlPhaseStartMs >= RELEASE_DWELL_MS) {
         turretPinsLoaded = 0;  // Pins released to deck
         Serial.println(F("   Release complete. Re-homing turret..."));
         ConveyorOff();
@@ -2735,20 +2743,20 @@ void updateFrameBlink() {
 // Set all pixels on both deck strips
 void deckAll(uint32_t col) {
   for (int i = 0; i < DECK_LED_LENGTH_L; i++) {
-    deckA.setPixelColor(i, col);
+    deckL.setPixelColor(i, col);
   }
   for (int i = 0; i < DECK_LED_LENGTH_R; i++) {
-    deckB.setPixelColor(i, col);
+    deckR.setPixelColor(i, col);
   }
 }
 
 // Set all pixels on both lane strips
 void laneAll(uint32_t col) {
   for (int i = 0; i < LANE_LED_LENGTH_L; i++) {
-    laneA.setPixelColor(i, col);
+    laneL.setPixelColor(i, col);
   }
   for (int i = 0; i < LANE_LED_LENGTH_R; i++) {
-    laneB.setPixelColor(i, col);
+    laneR.setPixelColor(i, col);
   }
 }
 
@@ -2756,12 +2764,12 @@ void laneAll(uint32_t col) {
 void deckSetColor(uint32_t col) {
   if (deckStripSelect == STRIP_BOTH || deckStripSelect == STRIP_LEFT) {
     for (int i = 0; i < DECK_LED_LENGTH_L; i++) {
-      deckA.setPixelColor(i, col);
+      deckL.setPixelColor(i, col);
     }
   }
   if (deckStripSelect == STRIP_BOTH || deckStripSelect == STRIP_RIGHT) {
     for (int i = 0; i < DECK_LED_LENGTH_R; i++) {
-      deckB.setPixelColor(i, col);
+      deckR.setPixelColor(i, col);
     }
   }
 }
@@ -2770,65 +2778,65 @@ void deckSetColor(uint32_t col) {
 void laneSetColor(uint32_t col) {
   if (laneStripSelect == STRIP_BOTH || laneStripSelect == STRIP_LEFT) {
     for (int i = 0; i < LANE_LED_LENGTH_L; i++) {
-      laneA.setPixelColor(i, col);
+      laneL.setPixelColor(i, col);
     }
   }
   if (laneStripSelect == STRIP_BOTH || laneStripSelect == STRIP_RIGHT) {
     for (int i = 0; i < LANE_LED_LENGTH_R; i++) {
-      laneB.setPixelColor(i, col);
+      laneR.setPixelColor(i, col);
     }
   }
 }
 
 // Show both deck strips
 void deckShow() {
-  deckA.show();
-  deckB.show();
+  deckL.show();
+  deckR.show();
 }
 
 // Show both lane strips
 void laneShow() {
-  laneA.show();
-  laneB.show();
+  laneL.show();
+  laneR.show();
 }
 
 // Show selected deck strip(s)
 void deckShowSelected() {
   if (deckStripSelect == STRIP_BOTH || deckStripSelect == STRIP_LEFT) {
-    deckA.show();
+    deckL.show();
   }
   if (deckStripSelect == STRIP_BOTH || deckStripSelect == STRIP_RIGHT) {
-    deckB.show();
+    deckR.show();
   }
 }
 
 // Show selected lane strip(s)
 void laneShowSelected() {
   if (laneStripSelect == STRIP_BOTH || laneStripSelect == STRIP_LEFT) {
-    laneA.show();
+    laneL.show();
   }
   if (laneStripSelect == STRIP_BOTH || laneStripSelect == STRIP_RIGHT) {
-    laneB.show();
+    laneR.show();
   }
 }
 
 // Set brightness for selected deck strip(s)
 void deckSetBrightnessSelected(uint8_t br) {
   if (deckStripSelect == STRIP_BOTH || deckStripSelect == STRIP_LEFT) {
-    deckA.setBrightness(br);
+    deckL.setBrightness(br);
   }
   if (deckStripSelect == STRIP_BOTH || deckStripSelect == STRIP_RIGHT) {
-    deckB.setBrightness(br);
+    deckR.setBrightness(br);
   }
 }
 
 // Set brightness for selected lane strip(s)
 void laneSetBrightnessSelected(uint8_t br) {
   if (laneStripSelect == STRIP_BOTH || laneStripSelect == STRIP_LEFT) {
-    laneA.setBrightness(br);
+    laneL.setBrightness(br);
   }
   if (laneStripSelect == STRIP_BOTH || laneStripSelect == STRIP_RIGHT) {
-    laneB.setBrightness(br);
+    laneR.setBrightness(br);
   }
 }
 
@@ -2927,24 +2935,24 @@ void updateLEDAnimation() {
       if (ledAnimTarget == LED_DECK) {
         if (currentSelect == STRIP_BOTH || currentSelect == STRIP_LEFT) {
           for (int i = 0; i < lenL; i++) {
-            deckA.setPixelColor(i, (i < nL) ? animColor : C_OFF());
+            deckL.setPixelColor(i, (i < nL) ? animColor : C_OFF());
           }
         }
         if (currentSelect == STRIP_BOTH || currentSelect == STRIP_RIGHT) {
           for (int i = 0; i < lenR; i++) {
-            deckB.setPixelColor(i, (i < nR) ? animColor : C_OFF());
+            deckR.setPixelColor(i, (i < nR) ? animColor : C_OFF());
           }
         }
         deckShowSelected();
       } else {
         if (currentSelect == STRIP_BOTH || currentSelect == STRIP_LEFT) {
           for (int i = 0; i < lenL; i++) {
-            laneA.setPixelColor(i, (i < nL) ? animColor : C_OFF());
+            laneL.setPixelColor(i, (i < nL) ? animColor : C_OFF());
           }
         }
         if (currentSelect == STRIP_BOTH || currentSelect == STRIP_RIGHT) {
           for (int i = 0; i < lenR; i++) {
-            laneB.setPixelColor(i, (i < nR) ? animColor : C_OFF());
+            laneR.setPixelColor(i, (i < nR) ? animColor : C_OFF());
           }
         }
         laneShowSelected();
@@ -2973,7 +2981,7 @@ void updateLEDAnimation() {
         if (flashCycles >= FLASH_COUNT) {
           animMode = ANIM_IDLE;
           if (ledAnimTarget == LED_DECK) {
-            deckSetBrightnessSelected(LED_BRIGHTNESS_NORMAL);
+            deckSetBrightnessSelected(DECK_LED_BRIGHTNESS);
             deckSetColor(currentDeckColor);
             deckShowSelected();
           } else {
@@ -3021,17 +3029,17 @@ void updateLEDAnimation() {
         deckSetColor(C_OFF());
         for (int k = 0; k < COMET_LEN; k++) {
           uint8_t br = 255 - (k * 60);
-          uint32_t col = deckA.Color(br, br, br);
+          uint32_t col = deckL.Color(br, br, br);
           if (currentSelect == STRIP_BOTH || currentSelect == STRIP_LEFT) {
             int idx = headL - k;
             if (idx >= 0 && idx < lenL) {
-              deckA.setPixelColor(idx, col);
+              deckL.setPixelColor(idx, col);
             }
           }
           if (currentSelect == STRIP_BOTH || currentSelect == STRIP_RIGHT) {
             int idx = headR - k;
             if (idx >= 0 && idx < lenR) {
-              deckB.setPixelColor(idx, col);
+              deckR.setPixelColor(idx, col);
             }
           }
         }
@@ -3040,17 +3048,17 @@ void updateLEDAnimation() {
         laneSetColor(C_OFF());
         for (int k = 0; k < COMET_LEN; k++) {
           uint8_t br = 255 - (k * 60);
-          uint32_t col = laneA.Color(br, br, br);
+          uint32_t col = laneL.Color(br, br, br);
           if (currentSelect == STRIP_BOTH || currentSelect == STRIP_LEFT) {
             int idx = headL - k;
             if (idx >= 0 && idx < lenL) {
-              laneA.setPixelColor(idx, col);
+              laneL.setPixelColor(idx, col);
             }
           }
           if (currentSelect == STRIP_BOTH || currentSelect == STRIP_RIGHT) {
             int idx = headR - k;
             if (idx >= 0 && idx < lenR) {
-              laneB.setPixelColor(idx, col);
+              laneR.setPixelColor(idx, col);
             }
           }
         }
@@ -3067,24 +3075,24 @@ void updateLEDAnimation() {
       if (ledAnimTarget == LED_DECK) {
         if (currentSelect == STRIP_BOTH || currentSelect == STRIP_LEFT) {
           for (int i = 0; i < lenL; i++) {
-            deckA.setPixelColor(i, wheel((i + rainbowOffset) & 255));
+            deckL.setPixelColor(i, wheel((i + rainbowOffset) & 255));
           }
         }
         if (currentSelect == STRIP_BOTH || currentSelect == STRIP_RIGHT) {
           for (int i = 0; i < lenR; i++) {
-            deckB.setPixelColor(i, wheel((i + rainbowOffset) & 255));
+            deckR.setPixelColor(i, wheel((i + rainbowOffset) & 255));
           }
         }
         deckShowSelected();
       } else {
         if (currentSelect == STRIP_BOTH || currentSelect == STRIP_LEFT) {
           for (int i = 0; i < lenL; i++) {
-            laneA.setPixelColor(i, wheel((i + rainbowOffset) & 255));
+            laneL.setPixelColor(i, wheel((i + rainbowOffset) & 255));
           }
         }
         if (currentSelect == STRIP_BOTH || currentSelect == STRIP_RIGHT) {
           for (int i = 0; i < lenR; i++) {
-            laneB.setPixelColor(i, wheel((i + rainbowOffset) & 255));
+            laneR.setPixelColor(i, wheel((i + rainbowOffset) & 255));
           }
         }
         laneShowSelected();
@@ -3097,12 +3105,12 @@ void updateLEDAnimation() {
 uint32_t wheel(byte wheelPos) {
   wheelPos = 255 - wheelPos;
   if (wheelPos < 85) {
-    return deckA.Color(255 - wheelPos * 3, 0, wheelPos * 3);
+    return deckL.Color(255 - wheelPos * 3, 0, wheelPos * 3);
   }
   if (wheelPos < 170) {
     wheelPos -= 85;
-    return deckA.Color(0, wheelPos * 3, 255 - wheelPos * 3);
+    return deckL.Color(0, wheelPos * 3, 255 - wheelPos * 3);
   }
   wheelPos -= 170;
-  return deckA.Color(wheelPos * 3, 255 - wheelPos * 3, 0);
+  return deckL.Color(wheelPos * 3, 255 - wheelPos * 3, 0);
 }

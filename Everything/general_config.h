@@ -1,11 +1,16 @@
 // =====================================================
-// USER CONFIGURATION
-// Adjustable settings for the pinsetter
-// Modify these values to calibrate your machine
+// USER CONFIGURATION - DEFAULT VALUES
+// This is the distribution template with factory defaults.
+// Copy to general_config.user.h and customize for your machine.
 // =====================================================
 
-#ifndef USER_CONFIG_H
-#define USER_CONFIG_H
+#ifndef GENERAL_CONFIG_H
+#define GENERAL_CONFIG_H
+
+// =====================================================
+// SCOREMORE SERIAL BAUD RATE
+// =====================================================
+#define SCOREMORE_BAUD      9600  // DEFAULT: 9600
 
 // =====================================================
 // LED STRIP LENGTHS
@@ -25,7 +30,9 @@
 // =====================================================
 // LED BRIGHTNESS (0-255)
 // =====================================================
-#define LED_BRIGHTNESS_NORMAL 80  // DEFAULT: 80
+#define LED_BRIGHTNESS_NORMAL  80 // Lane LED brightness (0-255). DEFAULT: 80
+#define DECK_LED_BRIGHTNESS    80 // Deck LED brightness (0-255). DEFAULT: 80
+#define LED_BRIGHTNESS_STRIKE  40 // Reduced brightness during strike animation (0-255). DEFAULT: 40
 
 // =====================================================
 // SWEEP SERVO ANGLES
@@ -61,17 +68,13 @@
 // RAISE SERVO ANGLES
 // Left and Right servos are mirrored (R = 180 - L)
 // =====================================================
-#define RAISE_UP_ANGLE_L        180  // Up position left. DEFAULT: 180
-#define RAISE_UP_ANGLE_R        0    // Up position right. DEFAULT: 0
-#define RAISE_DOWN_ANGLE_L      20   // Down/Set position left. DEFAULT: 20
-#define RAISE_DOWN_ANGLE_R      160  // Down/Set position right. DEFAULT: 160
-#define RAISE_GRAB_ANGLE_L      60   // Grab position left. DEFAULT: 60
-#define RAISE_GRAB_ANGLE_R      120  // Grab position right. DEFAULT: 120
-#define RAISE_DROP_ANGLE_L      80   // Drop position left. DEFAULT: 80
-#define RAISE_DROP_ANGLE_R      100  // Drop position right. DEFAULT: 100
+#define RAISE_UP_ANGLE          180  // Up position.       DEFAULT: 180
+#define RAISE_DOWN_ANGLE        20   // Down/Set position. DEFAULT: 20
+#define RAISE_GRAB_ANGLE        60   // Grab position.     DEFAULT: 60
+#define RAISE_DROP_ANGLE        80   // Drop position.     DEFAULT: 80
 
 // =====================================================
-// TURRET STEPPER SETTINGS.
+// TURRET STEPPER SETTINGS
 // =====================================================
 // Defaults are listed on settings that are commonly adjusted.
 #define TURRET_NORMAL_MAXSPEED  650.0
@@ -85,6 +88,9 @@
 
 // Pin release offset for position 10
 #define TURRET_PIN10_RELEASE_OFFSET -30
+
+// Extra offset for empty-turret purge at boot
+#define TURRET_EMPTY_EXTRA_OFFSET   -60 // DEFAULT: -60
 
 // =====================================================
 // TURRET PIN POSITIONS (steps from home)
@@ -109,47 +115,86 @@
 #define DEBOUNCE_MS     50
 
 // =====================================================
-// IR FLAP DETECTION
-// Auto-disables IR monitoring on rapid toggling
+// TURRET TIMING (milliseconds)
 // =====================================================
+#define CATCH_DELAY_MS          800   // Pause after catching pin at slots 1-8. DEFAULT: 800
+#define RELEASE_DWELL_MS        1000  // Dwell at release position for pins to fall. DEFAULT: 1000
+#define RELEASE_FEED_ASSIST_MS  250   // Conveyor assist during release dwell. DEFAULT: 250
+#define NINTH_SETTLE_MS         300   // Settle time after 9th pin caught. DEFAULT: 300
+
+// =====================================================
+// EVERYTHING-SPECIFIC TIMING (milliseconds)
+// Used only by Everything.ino
+// =====================================================
+// Extra settle time for raise servos (added to each raise move)
+#define DECK_EXTRA_SETTLE_MS    500   // DEFAULT: 500
+
+// Strike animation timing
+#define STRIKE_WIPE_MS          300   // DEFAULT: 300
+#define STRIKE_FRAME_MS         15    // DEFAULT: 15
+#define STRIKE_SWEEP_PAUSE_MS   1000  // DEFAULT: 1000
+
+// Ball comet animation
+#define BALL_COMET_MS           500   // DEFAULT: 500
+#define BALL_COMET_FRAME_MS     15    // DEFAULT: 15
+
+// Startup LED wipe speed
+#define STARTUP_WIPE_MS_PER_STEP 5   // DEFAULT: 5
+
+// Pause mode idle timeout
+#define PAUSE_IDLE_MS           300000 // 5 minutes. DEFAULT: 300000
+
+// Score interval (how often to poll serial/inputs)
+#define SCORE_INTERVAL          5     // DEFAULT: 5
+
+// Ball trigger timing
+#define BALL_LOW_CONFIRM_US     1000  // Microseconds to confirm ball sensor LOW. DEFAULT: 1000
+#define BALL_REARM_MS           300   // Rearm delay after ball trigger. DEFAULT: 300
+
+// ScoreMore ball pulse duration
+#define SCOREMORE_BALL_PULSE_MS 150   // DEFAULT: 150
+
+// Ball return door timing
+#define BR_CLOSE_AFTER_SWEEPBACK_MS 5000 // DEFAULT: 5000
+
+// Conveyor idle-stall timeout
+#define NO_CATCH_TIMEOUT_MS     30000 // DEFAULT: 30000
+
+// Post-set resume delay after deck up
+#define RESUME_AFTER_DECKUP_MS  2000  // DEFAULT: 2000
+
+// Strike flash timing
+#define FLASH_ON_MS             120   // DEFAULT: 120
+#define FLASH_OFF_MS            120   // DEFAULT: 120
+#define FLASH_COUNT             3     // DEFAULT: 3
+
+// Ball comet length (pixels)
+#define COMET_LEN               4     // DEFAULT: 4
+
+// =====================================================
+// MASTER_TEST-SPECIFIC SETTINGS
+// Used only by Master_Test.ino
+// =====================================================
+// IR Flap detection (auto-disables IR monitoring on rapid toggling)
 #define IR_FLAP_COUNT       5     // Toggles within window to trigger
 #define IR_FLAP_WINDOW_MS   200   // Window in ms
 
-// =====================================================
-// SCISSOR CYCLE TIMING (milliseconds)
-// =====================================================
+// Scissor cycle timing
 #define SCISSOR_CYCLE_MS    2000  // DEFAULT: 2000
 
-// =====================================================
-// LED ANIMATION TIMING (milliseconds)
-// =====================================================
+// LED animation timing (Master_Test)
 #define WIPE_MS             500
 #define WIPE_FRAME_MS       15
-#define FLASH_ON_MS         120
-#define FLASH_OFF_MS        120
-#define FLASH_COUNT         5
-#define COMET_MS            500
-#define COMET_FRAME_MS      15
-#define COMET_LEN           4
 #define RAINBOW_FRAME_MS    20
+#define COMET_MS            500   // DEFAULT: 500
+#define COMET_FRAME_MS      15    // DEFAULT: 15
 
-// =====================================================
-// PIN DROP SEQUENCE TIMING (milliseconds)
-// =====================================================
-#define PDROP_SETTLE_MS     500   // Pause for small servo moves (scissor, slider)
-#define PDROP_RAISE_SETTLE_MS 1300 // Pause for raise servo to complete full travel. DEFAULT: 1300
-#define PDROP_DROP_MS       800   // Pause for pins to fall after slider release
+// Pin drop sequence timing
+#define PDROP_SETTLE_MS         500   // Pause for small servo moves. DEFAULT: 500
+#define PDROP_RAISE_SETTLE_MS   1300  // Pause for raise servo full travel. DEFAULT: 1300
+#define PDROP_DROP_MS           800   // Pause for pins to fall after slider release. DEFAULT: 800
 
-// =====================================================
-// TURRET LOAD SEQUENCE TIMING (milliseconds)
-// =====================================================
-#define TLOAD_CATCH_DELAY_MS   800   // Pause after catching pin at slots 1-8
-#define TLOAD_RELEASE_DWELL_MS 1000  // Dwell at release position for pins to fall
-#define TLOAD_NINTH_SETTLE_MS  300   // Settle time after 9th pin caught
+// Frame LED blink interval
+#define FRAME_BLINK_INTERVAL    500   // DEFAULT: 500
 
-// =====================================================
-// FRAME LED BLINK INTERVAL (milliseconds)
-// =====================================================
-#define FRAME_BLINK_INTERVAL 500
-
-#endif // USER_CONFIG_H
+#endif // GENERAL_CONFIG_H
