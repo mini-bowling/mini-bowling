@@ -1,0 +1,1781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mini Bowling – Pin Config Tool v1.0.0</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%232563eb'/><circle cx='16' cy='13' r='6' fill='white'/><circle cx='13' cy='12' r='1.2' fill='%232563eb'/><circle cx='19' cy='12' r='1.2' fill='%232563eb'/><circle cx='16' cy='15' r='1.2' fill='%232563eb'/><rect x='10' y='22' width='12' height='3' rx='1.5' fill='white' opacity='0.7'/></svg>">
+  <style>
+    :root {
+      --bg:           #f0f4fb;
+      --surface:      #ffffff;
+      --surface-2:    #eaf0ff;
+      --surface-3:    #dde6f8;
+      --border:       #c0cfe8;
+      --border-light: #97b0d4;
+      --text:         #18243e;
+      --text-muted:   #4a6080;
+      --text-dim:     #8aaccc;
+      --accent:       #2563eb;
+      --accent-hover: #1d4ed8;
+      --accent-dim:   #dbeafe;
+      --success:      #16a34a;
+      --warning:      #b45309;
+      --warning-dim:  #fef3c7;
+      --error:        #dc2626;
+      --error-dim:    #fee2e2;
+      --modified:     #7c3aed;
+      --modified-dim: #ede9fe;
+      --radius:       10px;
+      --radius-sm:    6px;
+      --radius-xs:    4px;
+      --shadow:       0 2px 12px rgba(0,0,0,0.08);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Roboto', system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    code, .mono {
+      font-family: 'Consolas', 'JetBrains Mono', 'Fira Code', 'Monaco', monospace;
+    }
+
+    /* ─── Header ─────────────────────────────────── */
+
+    .site-header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 28px;
+      position: sticky;
+      top: 0;
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      height: 68px;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.10);
+    }
+
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .header-logo {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, #5eabff, #a855f7, #ec4899);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .header-title h1 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+      white-space: nowrap;
+    }
+
+    .header-title .subtitle {
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    /* ─── Buttons ─────────────────────────────────── */
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      transition: background 0.15s, opacity 0.15s, box-shadow 0.15s;
+      white-space: nowrap;
+      font-family: inherit;
+    }
+
+    .btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+      box-shadow: 0 0 0 0 rgba(59,130,246,0.4);
+    }
+    .btn-primary:not(:disabled):hover {
+      background: var(--accent-hover);
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.25);
+    }
+    .btn-primary:disabled {
+      background: var(--surface-3);
+      color: var(--text-dim);
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover {
+      background: var(--surface-2);
+      color: var(--text);
+      border-color: var(--border-light);
+    }
+
+    /* ─── Main layout ─────────────────────────────── */
+
+    .main {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 28px 28px 60px;
+    }
+
+    /* ─── Instructions panel ──────────────────────── */
+
+    .instructions {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 24px;
+      overflow: hidden;
+    }
+
+    .instructions-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+      cursor: pointer;
+      user-select: none;
+      gap: 12px;
+    }
+    .instructions-toggle:hover { background: var(--surface-2); }
+
+    .instructions-toggle-label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .info-icon {
+      width: 20px;
+      height: 20px;
+      background: var(--accent-dim);
+      border: 1px solid var(--accent);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .chevron {
+      color: var(--text-dim);
+      transition: transform 0.2s;
+      font-size: 12px;
+    }
+    .chevron.open { transform: rotate(180deg); }
+
+    .instructions-body {
+      padding: 18px;
+      border-top: 1px solid var(--border);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    .instructions-body.collapsed { display: none; }
+
+    @media (max-width: 760px) {
+      .instructions-body { grid-template-columns: 1fr; }
+    }
+
+    .instr-disclaimer {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 10px 14px;
+      background: var(--warning-dim);
+      border: 1px solid var(--warning);
+      border-radius: var(--radius-xs);
+      font-size: 12px;
+      color: #92400e;
+      line-height: 1.5;
+    }
+    .instr-disclaimer-icon { flex-shrink: 0; font-size: 14px; margin-top: 1px; }
+
+    .instr-section h3 {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    .steps { list-style: none; counter-reset: steps; display: flex; flex-direction: column; gap: 10px; }
+
+    .steps li {
+      counter-increment: steps;
+      display: flex;
+      gap: 14px;
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.6;
+      align-items: flex-start;
+    }
+
+    .steps li > span, .steps li > p { flex: 1; min-width: 0; }
+
+    .steps li::before {
+      content: counter(steps);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--accent-dim);
+      border: 1.5px solid var(--accent);
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 700;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .steps li strong { color: var(--text); }
+
+    .file-paths {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .file-path {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xs);
+      padding: 6px 10px;
+      font-size: 12px;
+      color: var(--accent);
+      font-family: monospace;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .file-path::before { content: '📄'; font-size: 13px; }
+
+    .legend-grid {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 8px 12px;
+      align-items: center;
+    }
+
+    .legend-swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+
+    .legend-label {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .legend-label strong { color: var(--text); }
+
+    /* ─── Alert bar ───────────────────────────────── */
+
+    .alert {
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      margin-bottom: 20px;
+      border: 1px solid;
+      display: none;
+    }
+    .alert.visible { display: block; }
+
+    .alert-conflict {
+      background: var(--warning-dim);
+      border-color: var(--warning);
+    }
+
+    .alert-title {
+      font-size: 13px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .alert-conflict .alert-title { color: var(--warning); }
+
+    .alert-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .alert-conflict .alert-list { color: #92400e; }
+    .alert-list li { font-size: 12px; }
+
+    /* ─── Stats bar ───────────────────────────────── */
+
+    .stats-bar {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      margin-bottom: 20px;
+      padding: 10px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+    }
+
+    .stat {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .stat-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .stat-count { font-weight: 600; color: var(--text); }
+
+    .stats-bar-spacer { flex: 1; }
+
+    .valid-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .valid-indicator.ok { color: var(--success); }
+    .valid-indicator.error { color: var(--error); }
+
+    /* ─── Groups grid ─────────────────────────────── */
+
+    .groups-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(520px, 1fr));
+      gap: 18px;
+      align-items: start;
+    }
+
+    .group-full { grid-column: 1 / -1; }
+
+    @media (max-width: 680px) {
+      .groups-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ─── Card ────────────────────────────────────── */
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .card-header {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface-2);
+    }
+
+    .card-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .card-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      background: var(--surface-3);
+      border: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .card-subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 3px;
+      margin-left: 38px;
+    }
+
+    .card-body { }
+
+    /* ─── Pins grid (2-col for ScoreMore) ────────── */
+
+    .pins-2col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    @media (max-width: 900px) {
+      .pins-2col { grid-template-columns: 1fr; }
+    }
+
+    /* ─── Group note ──────────────────────────────── */
+
+    .group-note {
+      margin: 12px 16px 4px;
+      padding: 8px 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xs);
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    /* ─── Pin row ─────────────────────────────────── */
+
+    .pin-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      padding: 10px 16px;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+      border-left: 3px solid transparent;
+      transition: background 0.1s, border-left-color 0.15s;
+    }
+
+    .pin-row:last-child { border-bottom: none; }
+    .pin-row:hover { background: var(--surface-2); }
+
+    /* State variants */
+    .pin-row.state-modified   { border-left-color: var(--modified); }
+    .pin-row.state-conflict   { border-left-color: var(--warning); background: var(--warning-dim); }
+    .pin-row.state-invalid    { border-left-color: var(--error);   background: var(--error-dim); }
+    .pin-row.state-disabled .pin-left,
+    .pin-row.state-disabled .pin-default,
+    .pin-row.state-disabled .pin-input { opacity: 0.5; }
+
+    .pin-row:hover.state-conflict { background: #fde68a; }
+    .pin-row:hover.state-invalid  { background: #fecaca; }
+
+    .pin-left { min-width: 0; }
+
+    .pin-name {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text);
+      font-family: 'Consolas', 'JetBrains Mono', monospace;
+      line-height: 1.3;
+    }
+
+    .pin-desc {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+      line-height: 1.4;
+    }
+
+    .pin-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .pin-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 10px;
+      white-space: nowrap;
+      letter-spacing: 0.02em;
+    }
+    .pin-badge.conflict { background: var(--warning-dim); color: var(--warning); }
+    .pin-badge.invalid  { background: var(--error-dim);   color: var(--error); }
+    .pin-badge.modified { background: var(--modified-dim); color: var(--modified); }
+
+    .pin-default {
+      font-size: 11px;
+      color: var(--text-dim);
+      font-family: monospace;
+      white-space: nowrap;
+    }
+
+    /* ─── Pin input ───────────────────────────────── */
+
+    .pin-input {
+      width: 76px;
+      background: var(--bg);
+      border: 1.5px solid var(--border);
+      color: var(--text);
+      padding: 5px 8px;
+      border-radius: var(--radius-xs);
+      font-family: 'Consolas', 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .pin-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.2);
+    }
+
+    .pin-input.input-conflict { border-color: var(--warning); }
+    .pin-input.input-invalid  { border-color: var(--error); }
+    .pin-input.input-modified { border-color: var(--modified); }
+    .pin-input:disabled { background: var(--surface-2); cursor: not-allowed; }
+
+    /* ─── Optional toggle ─────────────────────────── */
+
+    .opt-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .opt-label {
+      font-size: 11px;
+      color: var(--text-dim);
+      white-space: nowrap;
+    }
+
+    .toggle {
+      position: relative;
+      width: 30px;
+      height: 17px;
+      flex-shrink: 0;
+    }
+
+    .toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+
+    .toggle-track {
+      position: absolute;
+      inset: 0;
+      background: var(--surface-3);
+      border-radius: 17px;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      transition: background 0.2s, border-color 0.2s;
+    }
+
+    .toggle-thumb {
+      position: absolute;
+      width: 11px;
+      height: 11px;
+      left: 3px;
+      top: 3px;
+      background: var(--text-dim);
+      border-radius: 50%;
+      cursor: pointer;
+      transition: transform 0.2s, background 0.2s;
+    }
+
+    .toggle input:checked + .toggle-track { background: var(--accent); border-color: var(--accent); }
+    .toggle input:checked + .toggle-track + .toggle-thumb { transform: translateX(13px); background: white; }
+    .toggle input:not(:checked) ~ .toggle-track ~ .toggle-thumb { background: var(--text-dim); }
+
+    /* Focus ring for toggle */
+    .toggle input:focus-visible + .toggle-track {
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.35);
+    }
+
+    /* ─── Footer ──────────────────────────────────── */
+
+    .footer {
+      max-width: 1280px;
+      margin: 32px auto 0;
+      padding: 0 28px;
+      text-align: center;
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    /* ─── Scrollbar ───────────────────────────────── */
+
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
+
+    /* ─── Responsive ──────────────────────────────── */
+
+    @media (max-width: 600px) {
+      .site-header { height: auto; padding: 12px 16px; flex-wrap: wrap; position: static; }
+      .main { padding: 16px 16px 40px; }
+      .stats-bar { flex-wrap: wrap; gap: 10px; }
+    }
+
+    /* ─── Board Diagram ───────────────────────────────── */
+
+    .board-wrap {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .board-wrap svg {
+      display: block;
+      width: 100%;
+      max-width: 620px;
+      min-width: 400px;
+    }
+
+    .board-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 20px;
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .board-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .board-legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* ─── Load banner ────────────────────────────────── */
+
+    .load-banner {
+      position: fixed;
+      top: 78px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-10px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.22s, transform 0.22s;
+      z-index: 500;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 20px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      border: 1px solid;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+      white-space: nowrap;
+      min-width: 260px;
+    }
+    .load-banner.visible {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+      pointer-events: auto;
+    }
+    .load-banner code { font-family: monospace; font-size: 12px; }
+
+    .load-banner-ok   { background: #d1fae5; border-color: #059669; color: #065f46; }
+    .load-banner-warn { background: #fef3c7; border-color: var(--warning); color: #92400e; }
+
+    /* ── Defaults modal ── */
+    .modal-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.35);
+      z-index: 600;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .modal-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px 32px;
+      max-width: 440px;
+      width: calc(100% - 40px);
+      box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+    }
+    .modal-box h3 { margin: 0 0 10px; font-size: 16px; color: var(--text); }
+    .modal-box p  { margin: 0 0 10px; font-size: 13px; color: var(--text-muted); line-height: 1.55; }
+    .modal-box p.modal-sub { font-size: 12px; }
+    .modal-icon { font-size: 26px; margin-bottom: 8px; color: var(--success); }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+    .board-tooltip {
+      position: fixed;
+      display: none;
+      background: #18243e;
+      color: #f0f6ff;
+      font-size: 12px;
+      font-family: 'Consolas', 'JetBrains Mono', monospace;
+      padding: 5px 11px;
+      border-radius: 5px;
+      pointer-events: none;
+      z-index: 9999;
+      white-space: nowrap;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════ HEADER -->
+<header class="site-header">
+  <div class="header-brand">
+    <div class="header-logo">🎳</div>
+    <div class="header-title">
+      <h1>Pin Configuration Tool</h1>
+      <div class="subtitle">Mini Bowling Pinsetter &mdash; Arduino Mega &nbsp;&middot;&nbsp; v1.0.0</div>
+    </div>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-ghost" onclick="triggerFileLoad()">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14 10v3a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-3" stroke-linecap="round"/>
+        <polyline points="11,5 8,2 5,5" stroke-linecap="round" stroke-linejoin="round"/>
+        <line x1="8" y1="2" x2="8" y2="10" stroke-linecap="round"/>
+      </svg>
+      Load Config
+    </button>
+    <input type="file" id="configFileInput" accept=".h" style="display:none"
+           onchange="handleFileLoad(event)">
+    <button class="btn btn-ghost" onclick="resetToDefaults()">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M13 8A5 5 0 1 1 8 3" stroke-linecap="round"/>
+        <polyline points="13,3 13,8 8,8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Reset to Defaults
+    </button>
+    <button class="btn btn-primary" id="downloadBtn" onclick="downloadConfig()">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M8 2v8M5 7l3 3 3-3" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M3 13h10" stroke-linecap="round"/>
+      </svg>
+      Download pin_config.user.h
+    </button>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════════ MAIN -->
+<main class="main">
+
+  <!-- Instructions accordion -->
+  <div class="instructions">
+    <div class="instructions-toggle" onclick="toggleInstructions()" role="button" tabindex="0"
+         onkeydown="if(event.key==='Enter'||event.key===' ')toggleInstructions()">
+      <span class="instructions-toggle-label">
+        <span class="info-icon">i</span>
+        How to use this tool
+      </span>
+      <span class="chevron open" id="chevron">▾</span>
+    </div>
+    <div class="instructions-body" id="instructionsBody">
+      <div class="instr-section">
+        <h3>Steps</h3>
+        <ol class="steps">
+          <li><span>Edit pin numbers in the fields below. Each field shows the default value for reference.</span></li>
+          <li><span>Click <strong>Download pin_config.user.h</strong> — the button is
+            disabled if there are validation errors or pin conflicts.</span>
+          </li>
+          <li><span>Copy the downloaded file into <em>one or both</em> sketch directories:
+            <div class="file-paths">
+              <span class="file-path">Everything/pin_config.user.h</span>
+              <span class="file-path">Master_Test/pin_config.user.h</span>
+            </div></span>
+          </li>
+          <li><span>The sketch automatically uses <strong>pin_config.user.h</strong> when it
+            exists — no code changes needed.</span>
+          </li>
+        </ol>
+      </div>
+      <div class="instr-section">
+        <h3>Color legend</h3>
+        <div class="legend-grid">
+          <div class="legend-swatch" style="background:var(--modified)"></div>
+          <div class="legend-label"><strong>Purple</strong> — Value changed from default</div>
+          <div class="legend-swatch" style="background:var(--warning)"></div>
+          <div class="legend-label"><strong>Amber</strong> — Pin conflict (same number used twice)</div>
+          <div class="legend-swatch" style="background:var(--error)"></div>
+          <div class="legend-label"><strong>Red</strong> — Invalid pin number</div>
+        </div>
+        <div style="margin-top: 16px;">
+          <h3 style="margin-bottom:8px;">Valid pin formats</h3>
+          <div class="legend-grid">
+            <code class="mono" style="font-size:12px;color:var(--accent);">0–53</code>
+            <div class="legend-label">Digital pins on Arduino Mega</div>
+            <code class="mono" style="font-size:12px;color:var(--accent);">A0–A15</code>
+            <div class="legend-label">Analog pins (case-insensitive)</div>
+          </div>
+        </div>
+      </div>
+      <div class="instr-disclaimer">
+        <span class="instr-disclaimer-icon">⚠</span>
+        <span>Not all Arduino pins support the same functionality. Some pins have hardware
+          restrictions (PWM, interrupts, serial, I²C, SPI, etc.) that may affect how
+          components behave. Reassigning pins should be done at your own discretion — verify
+          that the chosen pin supports the required function before uploading.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Conflict alert -->
+  <div class="alert alert-conflict" id="conflictAlert">
+    <div class="alert-title">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M8 1L15 14H1L8 1z" stroke-linejoin="round"/>
+        <path d="M8 6v4M8 11v1" stroke-linecap="round"/>
+      </svg>
+      Pin Conflicts Detected
+    </div>
+    <ul class="alert-list" id="conflictList"></ul>
+  </div>
+
+  <!-- Stats bar -->
+  <div class="stats-bar">
+    <div class="stat">
+      <div class="stat-dot" style="background:var(--modified)"></div>
+      <span><span class="stat-count" id="statModified">0</span> modified</span>
+    </div>
+    <div class="stat">
+      <div class="stat-dot" style="background:var(--warning)"></div>
+      <span><span class="stat-count" id="statConflicts">0</span> conflicts</span>
+    </div>
+    <div class="stat">
+      <div class="stat-dot" style="background:var(--error)"></div>
+      <span><span class="stat-count" id="statInvalid">0</span> invalid</span>
+    </div>
+    <div class="stats-bar-spacer"></div>
+    <div class="valid-indicator ok" id="validIndicator">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M3 8l4 4 6-6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Ready to download
+    </div>
+  </div>
+
+  <!-- Board diagram -->
+  <div class="card" style="margin-bottom:22px;">
+    <div class="card-header">
+      <div class="card-title"><div class="card-icon">🔌</div>Arduino Mega 2560 — Pin Layout</div>
+      <div class="card-subtitle">Pins are color-coded by group &nbsp;·&nbsp; Hover a pin to see its assignment</div>
+    </div>
+    <div class="card-body" style="padding:16px 18px 18px;">
+      <div class="board-wrap" id="boardDiagram"></div>
+      <div class="board-legend" id="boardLegend"></div>
+    </div>
+  </div>
+
+  <!-- Pin groups grid -->
+  <div class="groups-grid" id="groupsGrid"></div>
+
+</main>
+
+<div class="footer">
+  Pin Configuration Tool v1.0.0
+  &nbsp;·&nbsp;
+  All processing happens in your browser — no data is sent anywhere.
+  &nbsp;·&nbsp;
+  Open <strong>index.html</strong> directly from the filesystem, no server required.
+</div>
+
+<!-- ═══════════════════════════════════════════════════ SCRIPT -->
+<script>
+'use strict';
+
+// ─────────────────────────────────────────────────────── DATA
+
+const PIN_GROUPS = [
+  {
+    id: 'stepper',
+    title: 'Stepper Motor',
+    icon: '⚙',
+    desc: 'Turret carousel rotation',
+    physical: true,
+    pins: [
+      { name: 'STEP_PIN',           def: '2',  desc: 'Step pulse output to stepper driver' },
+      { name: 'DIR_PIN',            def: '3',  desc: 'Direction output to stepper driver' },
+      { name: 'STEPPER_ENABLE_PIN', def: '22', desc: 'Enable pin — optional, only if your driver has one', optional: true },
+    ],
+  },
+  {
+    id: 'relay',
+    title: 'Relay',
+    icon: '⚡',
+    desc: 'Conveyor belt motor control',
+    physical: true,
+    pins: [
+      { name: 'MOTOR_RELAY_PIN', def: '4', desc: 'Conveyor motor relay — HIGH to run, LOW to stop' },
+    ],
+  },
+  {
+    id: 'sensors',
+    title: 'Sensor Inputs',
+    icon: '📡',
+    desc: 'Continuously monitored inputs',
+    physical: true,
+    pins: [
+      { name: 'IR_SENSOR_PIN',   def: '5',  desc: 'Cross-conveyor IR sensor — detects pins on conveyor' },
+      { name: 'HALL_EFFECT_PIN', def: '6',  desc: 'Hall effect sensor — turret homing reference point' },
+      { name: 'BALL_SENSOR_PIN', def: 'A0', desc: 'Ball detection sensor (trigger)' },
+      { name: 'BALL_SPEED_PIN',  def: 'A1', desc: 'Ball speed measurement sensor' },
+    ],
+  },
+  {
+    id: 'servos',
+    title: 'Servo Motors',
+    icon: '🦾',
+    desc: 'All servo motor outputs',
+    physical: true,
+    pins: [
+      { name: 'SCISSOR_PIN',     def: '7',  desc: 'Scissor mechanism — grips and releases pins from lane' },
+      { name: 'SLIDE_PIN',       def: '8',  desc: 'Sliding deck — extends to release pins, retracts to catch' },
+      { name: 'RAISE_LEFT_PIN',  def: '9',  desc: 'Left raise servo — raises and lowers deck assembly' },
+      { name: 'RAISE_RIGHT_PIN', def: '10', desc: 'Right raise servo — mirrored from left, always paired' },
+      { name: 'LEFT_SWEEP_PIN',  def: '11', desc: 'Left sweep arm — clears fallen pins from lane' },
+      { name: 'RIGHT_SWEEP_PIN', def: '12', desc: 'Right sweep arm — mirrored from left, always paired' },
+      { name: 'BALL_RETURN_PIN', def: '13', desc: 'Ball return door — opens to let ball through to return track' },
+    ],
+  },
+  {
+    id: 'reset',
+    title: 'Reset Input',
+    icon: '🔄',
+    desc: 'External pinsetter reset',
+    physical: true,
+    pins: [
+      { name: 'PINSETTER_RESET_PIN', def: '41', desc: 'External pinsetter reset trigger input' },
+    ],
+  },
+  {
+    id: 'frameleds',
+    title: 'Frame Indicator LEDs',
+    icon: '💡',
+    desc: 'Simple on/off frame status LEDs',
+    physical: true,
+    pins: [
+      { name: 'FRAME_LED1_PIN', def: '46', desc: 'Frame indicator LED 1' },
+      { name: 'FRAME_LED2_PIN', def: '47', desc: 'Frame indicator LED 2' },
+    ],
+  },
+  {
+    id: 'neopixel',
+    title: 'NeoPixel LED Strips',
+    icon: '🌈',
+    desc: 'Addressable LED strips for deck and lane',
+    physical: true,
+    pins: [
+      { name: 'DECK_PIN_L', def: '50', desc: 'Left deck LED strip' },
+      { name: 'DECK_PIN_R', def: '51', desc: 'Right deck LED strip' },
+      { name: 'LANE_PIN_L', def: '52', desc: 'Left lane LED strip' },
+      { name: 'LANE_PIN_R', def: '53', desc: 'Right lane LED strip' },
+    ],
+  },
+];
+
+// Build flat lookup: pinName → { pin, group }
+const PIN_MAP = new Map();
+PIN_GROUPS.forEach(g => g.pins.forEach(p => PIN_MAP.set(p.name, { pin: p, group: g })));
+
+// ─────────────────────────────────────────────────────── BOARD CONSTANTS
+
+const GROUP_COLORS = {
+  stepper:   '#f97316',  // orange
+  relay:     '#10b981',  // emerald green
+  sensors:   '#22d3ee',  // cyan
+  servos:    '#60a5fa',  // blue
+  reset:     '#f472b6',  // pink
+  frameleds: '#facc15',  // bright yellow
+  neopixel:  '#c084fc',  // purple
+};
+
+// Board geometry (viewBox 620×410)
+// D0-D21 horizontal along top, D22-D53 vertical double column on right, A0-A15 along bottom
+const BD = {
+  W: 620, H: 410, P: 20,
+  TY: 28,  D0X: 52,  D14X: 372,   // top single row (D14X = 52 + 16×20)
+  VIX: 576, VOX: 596, VY0: 65,    // D22-D53: inner col x, outer col x, start y
+  BY: 385, AX: 252,  PX: 52,      // bottom row (AX = 52 + 10×20)
+};
+
+// Coordinate lookup: normalized pin value → {x, y}
+const PIN_POS = {};
+for (let n = 0; n <= 13; n++) PIN_POS[String(n)]    = { x: BD.D0X  + n*BD.P, y: BD.TY };
+for (let n = 0; n <=  7; n++) PIN_POS[String(14+n)] = { x: BD.D14X + n*BD.P, y: BD.TY };
+for (let c = 0; c <  16; c++) {
+  PIN_POS[String(22+c*2)] = { x: BD.VIX, y: BD.VY0 + c*BD.P };  // even → inner col
+  PIN_POS[String(23+c*2)] = { x: BD.VOX, y: BD.VY0 + c*BD.P };  // odd  → outer col
+}
+for (let n = 0; n <= 15; n++) PIN_POS['A'+n] = { x: BD.AX + n*BD.P, y: BD.BY };
+
+// ─────────────────────────────────────────────────────── STATE
+
+// current string value for each pin
+const values = {};
+// whether optional pins are enabled
+const optEnabled = {};
+
+PIN_GROUPS.forEach(g => g.pins.forEach(p => {
+  values[p.name] = p.def;
+  if (p.optional) optEnabled[p.name] = false;
+}));
+
+// ─────────────────────────────────────────────────────── VALIDATION
+
+/**
+ * Validate a raw pin input string.
+ * @param {string} raw
+ * @param {boolean} isLogical - true for ScoreMore logical channels
+ * @returns {{ valid: boolean, value: string }}
+ */
+function validatePin(raw, isLogical) {
+  const s = raw.trim();
+  if (s === '') return { valid: false, value: '' };
+
+  if (isLogical) {
+    // Accept any non-negative integer (logical channel numbers)
+    if (/^\d+$/.test(s)) {
+      const n = parseInt(s, 10);
+      if (n >= 0 && n <= 999) return { valid: true, value: String(n) };
+    }
+    return { valid: false, value: s };
+  }
+
+  // Physical pin: 0-53 (digital) or A0-A15 (analog)
+  if (/^[Aa]\d{1,2}$/.test(s)) {
+    const n = parseInt(s.slice(1), 10);
+    if (n >= 0 && n <= 15) return { valid: true, value: 'A' + n };
+    return { valid: false, value: s };
+  }
+  if (/^\d+$/.test(s)) {
+    const n = parseInt(s, 10);
+    if (n >= 0 && n <= 53) return { valid: true, value: String(n) };
+    return { valid: false, value: s };
+  }
+  return { valid: false, value: s };
+}
+
+// ─────────────────────────────────────────────────────── CONFLICT DETECTION
+
+/** Returns two Maps: physConflicts and smConflicts.
+ *  Each map: normalizedValue → [pinName, ...] (only entries with ≥ 2 names)
+ */
+function detectConflicts() {
+  const physMap = new Map();
+  const smMap   = new Map();
+
+  PIN_GROUPS.forEach(g => {
+    const logical = !g.physical;
+    g.pins.forEach(p => {
+      if (p.optional && !optEnabled[p.name]) return;
+      const { valid, value } = validatePin(values[p.name], logical);
+      if (!valid) return;
+      const map = logical ? smMap : physMap;
+      if (!map.has(value)) map.set(value, []);
+      map.get(value).push(p.name);
+    });
+  });
+
+  const filter = m => new Map([...m].filter(([, names]) => names.length > 1));
+  return { physConflicts: filter(physMap), smConflicts: filter(smMap) };
+}
+
+// Get cached conflicts (refreshed on each update cycle)
+let _conflicts = { physConflicts: new Map(), smConflicts: new Map() };
+
+function refreshConflicts() {
+  _conflicts = detectConflicts();
+}
+
+function pinIsConflict(pinName, group) {
+  const map = group.physical ? _conflicts.physConflicts : _conflicts.smConflicts;
+  const logical = !group.physical;
+  const { valid, value } = validatePin(values[pinName], logical);
+  if (!valid) return false;
+  const names = map.get(value);
+  return names ? names.includes(pinName) : false;
+}
+
+// ─────────────────────────────────────────────────────── RENDER
+
+function render() {
+  const grid = document.getElementById('groupsGrid');
+  grid.innerHTML = '';
+  refreshConflicts();
+
+  PIN_GROUPS.forEach(g => {
+    const card = document.createElement('div');
+    card.className = 'card' + (g.full ? ' group-full' : '');
+
+    // Header
+    const header = document.createElement('div');
+    header.className = 'card-header';
+    header.innerHTML =
+      `<div class="card-title"><div class="card-icon">${g.icon || ''}</div>${g.title}</div>` +
+      `<div class="card-subtitle">${g.desc}</div>`;
+    card.appendChild(header);
+
+    // Body
+    const body = document.createElement('div');
+    body.className = 'card-body';
+
+    if (g.note) {
+      const note = document.createElement('div');
+      note.className = 'group-note';
+      note.textContent = g.note;
+      body.appendChild(note);
+    }
+
+    // Pin container — 2-column for full-width groups
+    const pinContainer = document.createElement('div');
+    if (g.full) pinContainer.className = 'pins-2col';
+    body.appendChild(pinContainer);
+
+    g.pins.forEach(p => pinContainer.appendChild(buildPinRow(p, g)));
+    card.appendChild(body);
+    grid.appendChild(card);
+  });
+}
+
+function buildPinRow(pin, group) {
+  const logical  = !group.physical;
+  const disabled = pin.optional && !optEnabled[pin.name];
+  const { valid } = validatePin(values[pin.name], logical);
+  const modified  = !disabled && values[pin.name] !== pin.def;
+  const conflict  = !disabled && valid && pinIsConflict(pin.name, group);
+
+  let rowState = '';
+  if (disabled)       rowState = 'state-disabled';
+  else if (!valid)    rowState = 'state-invalid';
+  else if (conflict)  rowState = 'state-conflict';
+  else if (modified)  rowState = 'state-modified';
+
+  let inputClass = 'pin-input';
+  if (!disabled && !valid)   inputClass += ' input-invalid';
+  else if (!disabled && conflict)  inputClass += ' input-conflict';
+  else if (!disabled && modified)  inputClass += ' input-modified';
+
+  let badge = '';
+  if (!disabled && !valid)   badge = '<span class="pin-badge invalid">invalid</span>';
+  else if (!disabled && conflict)  badge = '<span class="pin-badge conflict">conflict</span>';
+  else if (!disabled && modified)  badge = '<span class="pin-badge modified">modified</span>';
+
+  const title = logical
+    ? 'Logical channel number (any integer 0–999)'
+    : 'Arduino Mega pin: 0–53 for digital, A0–A15 for analog';
+
+  const row = document.createElement('div');
+  row.className = `pin-row ${rowState}`;
+  row.id = `row-${pin.name}`;
+
+  const right = pin.optional
+    ? `<div class="pin-right">
+         <span class="pin-default">def:&nbsp;${pin.def}</span>
+         ${badge}
+         <input type="text" class="${inputClass}" id="inp-${pin.name}"
+                value="${values[pin.name]}" ${disabled ? 'disabled' : ''}
+                placeholder="${pin.def}" title="${title}"
+                oninput="onInput('${pin.name}',this.value)">
+         <div class="opt-wrap">
+           <label class="toggle" title="Enable this optional pin">
+             <input type="checkbox" id="opt-${pin.name}"
+                    ${optEnabled[pin.name] ? 'checked' : ''}
+                    onchange="onOptToggle('${pin.name}',this.checked)">
+             <div class="toggle-track"></div>
+             <div class="toggle-thumb"></div>
+           </label>
+           <span class="opt-label">enable</span>
+         </div>
+       </div>`
+    : `<div class="pin-right">
+         <span class="pin-default">def:&nbsp;${pin.def}</span>
+         ${badge}
+         <input type="text" class="${inputClass}" id="inp-${pin.name}"
+                value="${values[pin.name]}"
+                placeholder="${pin.def}" title="${title}"
+                oninput="onInput('${pin.name}',this.value)">
+       </div>`;
+
+  row.innerHTML =
+    `<div class="pin-left">
+       <div class="pin-name mono">${pin.name}</div>
+       <div class="pin-desc">${pin.desc}</div>
+     </div>` + right;
+
+  return row;
+}
+
+/** Patch a row in-place without replacing the input element (preserves focus/cursor). */
+function updateRow(pin, group) {
+  const row = document.getElementById(`row-${pin.name}`);
+  if (!row) return;
+
+  const logical  = !group.physical;
+  const disabled = pin.optional && !optEnabled[pin.name];
+  const { valid } = validatePin(values[pin.name], logical);
+  const modified  = !disabled && values[pin.name] !== pin.def;
+  const conflict  = !disabled && valid && pinIsConflict(pin.name, group);
+
+  // Row state class
+  let rowState = '';
+  if (disabled)       rowState = 'state-disabled';
+  else if (!valid)    rowState = 'state-invalid';
+  else if (conflict)  rowState = 'state-conflict';
+  else if (modified)  rowState = 'state-modified';
+  row.className = `pin-row ${rowState}`;
+
+  // Input — update class and disabled, but never clobber value/focus
+  const inp = document.getElementById(`inp-${pin.name}`);
+  if (inp) {
+    let inputClass = 'pin-input';
+    if (!disabled && !valid)        inputClass += ' input-invalid';
+    else if (!disabled && conflict) inputClass += ' input-conflict';
+    else if (!disabled && modified) inputClass += ' input-modified';
+    inp.className = inputClass;
+    inp.disabled  = disabled;
+    // Only sync value when input is not focused (avoid clobbering in-progress edits)
+    if (document.activeElement !== inp) inp.value = values[pin.name];
+  }
+
+  // Badge — remove old one, insert new one before the input if needed
+  row.querySelector('.pin-badge')?.remove();
+  if (!disabled && inp) {
+    let badgeHtml = '';
+    if (!valid)        badgeHtml = '<span class="pin-badge invalid">invalid</span>';
+    else if (conflict) badgeHtml = '<span class="pin-badge conflict">conflict</span>';
+    else if (modified) badgeHtml = '<span class="pin-badge modified">modified</span>';
+    if (badgeHtml) inp.insertAdjacentHTML('beforebegin', badgeHtml);
+  }
+}
+
+// ─────────────────────────────────────────────────────── EVENTS
+
+function onInput(pinName, rawValue) {
+  values[pinName] = rawValue;
+  refreshConflicts();
+  // Update all physical pin rows — conflicts can span groups
+  PIN_GROUPS.forEach(g => { if (g.physical) g.pins.forEach(p => updateRow(p, g)); });
+  updateStatus();
+}
+
+function onOptToggle(pinName, enabled) {
+  optEnabled[pinName] = enabled;
+  const { pin, group } = PIN_MAP.get(pinName);
+  refreshConflicts();
+  updateRow(pin, group);
+  group.pins.forEach(p => { if (p.name !== pinName) updateRow(p, group); });
+  updateStatus();
+}
+
+function resetToDefaults() {
+  if (!confirm('Reset all pin assignments to their default values?')) return;
+  PIN_GROUPS.forEach(g => g.pins.forEach(p => {
+    values[p.name] = p.def;
+    if (p.optional) optEnabled[p.name] = false;
+  }));
+  render();
+  updateStatus();
+}
+
+// ─────────────────────────────────────────────────────── STATUS
+
+function updateStatus() {
+  refreshConflicts();
+
+  let nModified = 0, nConflicts = 0, nInvalid = 0;
+
+  PIN_GROUPS.forEach(g => {
+    const logical = !g.physical;
+    const conflictMap = g.physical ? _conflicts.physConflicts : _conflicts.smConflicts;
+    g.pins.forEach(p => {
+      if (p.optional && !optEnabled[p.name]) return;
+      const { valid, value } = validatePin(values[p.name], logical);
+      if (!valid) { nInvalid++; return; }
+      if (values[p.name] !== p.def) nModified++;
+      const names = conflictMap.get(value);
+      if (names && names.includes(p.name)) nConflicts++;
+    });
+  });
+
+  document.getElementById('statModified').textContent  = nModified;
+  document.getElementById('statConflicts').textContent = nConflicts;
+  document.getElementById('statInvalid').textContent   = nInvalid;
+
+  const hasErrors = nInvalid > 0 || nConflicts > 0;
+  document.getElementById('downloadBtn').disabled = hasErrors;
+
+  const indicator = document.getElementById('validIndicator');
+  if (hasErrors) {
+    indicator.className = 'valid-indicator error';
+    indicator.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M4 4l8 8M12 4l-8 8" stroke-linecap="round"/>
+      </svg>
+      Fix errors to download`;
+  } else {
+    indicator.className = 'valid-indicator ok';
+    indicator.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M3 8l4 4 6-6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Ready to download`;
+  }
+
+  updateConflictAlert();
+  updateBoard();
+}
+
+function updateConflictAlert() {
+  const messages = [];
+
+  _conflicts.physConflicts.forEach((names, value) => {
+    messages.push(`Physical pin ${value} is assigned to: ${names.join(', ')}`);
+  });
+  _conflicts.smConflicts.forEach((names, value) => {
+    messages.push(`ScoreMore channel ${value} is assigned to: ${names.join(', ')}`);
+  });
+
+  const alert = document.getElementById('conflictAlert');
+  const list  = document.getElementById('conflictList');
+
+  if (messages.length > 0) {
+    list.innerHTML = messages.map(m => `<li>&#x25B8; ${m}</li>`).join('');
+    alert.classList.add('visible');
+  } else {
+    alert.classList.remove('visible');
+  }
+}
+
+// ─────────────────────────────────────────────────────── BOARD DIAGRAM
+
+function buildBoardDiagram() {
+  const NS = 'http://www.w3.org/2000/svg';
+  const mk = (tag, attrs) => {
+    const e = document.createElementNS(NS, tag);
+    if (attrs) Object.entries(attrs).forEach(([k, v]) => e.setAttribute(k, v));
+    return e;
+  };
+  const txt = (s, attrs) => { const e = mk('text', attrs); e.textContent = s; return e; };
+
+  const svg = mk('svg', { viewBox: `0 0 ${BD.W} ${BD.H}`, preserveAspectRatio: 'xMidYMid meet' });
+
+  // PCB board
+  svg.appendChild(mk('rect', { x:0, y:0, width:BD.W, height:BD.H, rx:10,
+    fill:'#1a5c32', stroke:'#0f3d1f', 'stroke-width':2 }));
+
+  // USB connector tab (left edge, vertically centered)
+  svg.appendChild(mk('rect', { x:0, y:BD.H/2-18, width:14, height:36, rx:3,
+    fill:'#888', stroke:'#555', 'stroke-width':1.5 }));
+
+
+  // ATmega2560 chip (center-left of board)
+  svg.appendChild(mk('rect', { x:130, y:115, width:240, height:160, rx:4,
+    fill:'#111', stroke:'#333', 'stroke-width':1 }));
+  svg.appendChild(txt('Arduino Mega 2560', { x:250, y:202,
+    'text-anchor':'middle', 'font-size':'11', fill:'#555',
+    'font-family':'monospace', 'pointer-events':'none' }));
+
+  // Section labels
+  const sl = { 'text-anchor':'middle', 'font-size':'8', fill:'#4d9e6f',
+               'font-family':'sans-serif', 'font-weight':'600', 'pointer-events':'none' };
+  svg.appendChild(txt('D0 – D13',  Object.assign({ x:182, y:62 }, sl)));
+  svg.appendChild(txt('D14 – D21', Object.assign({ x:442, y:62 }, sl)));
+  svg.appendChild(txt('D22 – D53', Object.assign({ x:544, y:62 }, sl)));
+  svg.appendChild(txt('PWR',       Object.assign({ x:122, y:362 }, sl)));
+  svg.appendChild(txt('A0 – A15',  Object.assign({ x:402, y:362 }, sl)));
+
+  // Non-configurable pins: GND + AREF (between D13 & D14) and 8 power pins (bottom-left)
+  const ncPos = [
+    { x: BD.D0X + 14*BD.P, y: BD.TY },
+    { x: BD.D0X + 15*BD.P, y: BD.TY },
+    ...Array.from({ length:8 }, (_, i) => ({ x: BD.PX + i*BD.P, y: BD.BY })),
+  ];
+  ncPos.forEach(({ x, y }) => {
+    svg.appendChild(mk('circle', { cx:x, cy:y, r:5.5, fill:'#2d7a50', stroke:'#1a5c32', 'stroke-width':1 }));
+    svg.appendChild(mk('circle', { cx:x, cy:y, r:2,   fill:'#0d2b18' }));
+  });
+
+  // Configurable pins — circle + hole + number label
+  Object.entries(PIN_POS).forEach(([pinVal, { x, y }]) => {
+    const g = document.createElementNS(NS, 'g');
+    g.id = 'bp-' + pinVal;
+    g.classList.add('bpg');
+
+    g.appendChild(mk('circle', { class:'bpc', cx:x, cy:y, r:5.5,
+      fill:'#6b7280', stroke:'#4b5563', 'stroke-width':1 }));
+    g.appendChild(mk('circle', { class:'bph', cx:x, cy:y, r:2, fill:'#111' }));
+
+    // Label position depends on which header group the pin is in
+    const num = parseInt(pinVal);
+    let lx, ly, anchor;
+    if (!isNaN(num) && num >= 22) {
+      // Vertical right-side column
+      if (num % 2 === 0) { lx = x - 8; ly = y + 3; anchor = 'end';   }  // even=inner → left
+      else               { lx = x + 8; ly = y + 3; anchor = 'start'; }  // odd=outer  → right
+    } else if (pinVal.startsWith('A')) {
+      lx = x;  ly = y - 9;  anchor = 'middle';  // analog bottom → above pin
+    } else {
+      lx = x;  ly = y + 14; anchor = 'middle';  // digital top   → below pin
+    }
+    g.appendChild(txt(pinVal, { class:'bpl', x:lx, y:ly, 'text-anchor':anchor,
+      'font-size':'6.5', fill:'#ffffff', 'font-family':'monospace', 'pointer-events':'none' }));
+
+    svg.appendChild(g);
+  });
+
+  const container = document.getElementById('boardDiagram');
+  container.innerHTML = '';
+  container.appendChild(svg);
+
+  // Tooltip — look up lazily so DOM order doesn't matter
+  svg.addEventListener('mousemove', e => {
+    const tip = document.getElementById('boardTooltip');
+    const g = e.target.closest('.bpg');
+    if (!g || !g.dataset.label) { tip.style.display = 'none'; return; }
+    tip.textContent = g.dataset.label;
+    tip.style.display = 'block';
+    tip.style.left = (e.clientX + 14) + 'px';
+    tip.style.top  = (e.clientY  -  6) + 'px';
+  });
+  svg.addEventListener('mouseleave', () => {
+    const tip = document.getElementById('boardTooltip');
+    if (tip) tip.style.display = 'none';
+  });
+
+  buildBoardLegend();
+  updateBoard();
+}
+
+function buildBoardLegend() {
+  const container = document.getElementById('boardLegend');
+  const groups = PIN_GROUPS.filter(g => g.physical);
+  container.innerHTML =
+    groups.map(g =>
+      `<div class="board-legend-item">` +
+      `<span class="board-legend-dot" style="background:${GROUP_COLORS[g.id] || '#60a5fa'}"></span>` +
+      `<span>${g.title}</span></div>`
+    ).join('') +
+    `<div class="board-legend-item"><span class="board-legend-dot" style="background:#ef4444;border:1px solid #b91c1c"></span><span>Conflict</span></div>` +
+    `<div class="board-legend-item"><span class="board-legend-dot" style="background:#6b7280"></span><span>Unused</span></div>`;
+}
+
+function updateBoard() {
+  // Reset all configurable pins to copper/unused
+  document.querySelectorAll('.bpg').forEach(g => {
+    g.querySelector('.bpc').setAttribute('fill',   '#6b7280');
+    g.querySelector('.bpc').setAttribute('stroke', '#4b5563');
+    g.querySelector('.bph').setAttribute('fill',   '#111');
+    const lbl = g.querySelector('.bpl');
+    if (lbl) lbl.setAttribute('fill', '#ffffff');
+    delete g.dataset.label;
+  });
+
+  // Color assigned pins by group (or conflict amber)
+  PIN_GROUPS.forEach(group => {
+    if (!group.physical) return;
+    group.pins.forEach(pin => {
+      if (pin.optional && !optEnabled[pin.name]) return;
+      const { valid, value } = validatePin(values[pin.name], false);
+      if (!valid) return;
+      const el = document.getElementById('bp-' + value);
+      if (!el) return;
+      const conflict = pinIsConflict(pin.name, group);
+      const color = conflict ? '#ef4444' : (GROUP_COLORS[group.id] || '#60a5fa');
+      el.querySelector('.bpc').setAttribute('fill',   color);
+      el.querySelector('.bpc').setAttribute('stroke', conflict ? '#b91c1c' : color);
+      el.querySelector('.bph').setAttribute('fill',   'rgba(0,0,0,0.35)');
+      const lbl = el.querySelector('.bpl');
+      if (lbl) lbl.setAttribute('fill', '#ffffff');
+      el.dataset.label = pin.name + '  ·  ' + group.title;
+    });
+  });
+}
+
+// ─────────────────────────────────────────────────────── INSTRUCTIONS
+
+let instrOpen = true;
+
+function toggleInstructions() {
+  instrOpen = !instrOpen;
+  document.getElementById('instructionsBody').classList.toggle('collapsed', !instrOpen);
+  document.getElementById('chevron').classList.toggle('open', instrOpen);
+}
+
+// ─────────────────────────────────────────────────────── FILE GENERATION
+
+function padRight(str, len) {
+  return str.padEnd(len, ' ');
+}
+
+function generateFileContent() {
+  const date = new Date().toLocaleDateString('en-US', {
+    year: 'numeric', month: 'long', day: 'numeric',
+  });
+
+  let out = '';
+  out += `// =====================================================\n`;
+  out += `// PIN CONFIGURATION - USER OVERRIDE\n`;
+  out += `// Generated by Mini Bowling Pin Config Tool\n`;
+  out += `// Generated: ${date}\n`;
+  out += `//\n`;
+  out += `// INSTRUCTIONS:\n`;
+  out += `//   1. Copy this file into your sketch directory:\n`;
+  out += `//\n`;
+  out += `//        Everything/pin_config.user.h\n`;
+  out += `//      and/or\n`;
+  out += `//        Master_Test/pin_config.user.h\n`;
+  out += `//\n`;
+  out += `//   2. The sketch uses this file automatically via:\n`;
+  out += `//        #if __has_include("pin_config.user.h")\n`;
+  out += `//          #include "pin_config.user.h"\n`;
+  out += `//        #else\n`;
+  out += `//          #include "pin_config.h"\n`;
+  out += `//        #endif\n`;
+  out += `//      This file takes priority; pin_config.h is ignored.\n`;
+  out += `// =====================================================\n`;
+  out += `\n`;
+  out += `#ifndef PIN_CONFIG_H\n`;
+  out += `#define PIN_CONFIG_H\n`;
+
+  PIN_GROUPS.forEach(g => {
+    const logical = !g.physical;
+
+    // Separate active from commented-out optional pins
+    const activePins    = g.pins.filter(p => !p.optional || optEnabled[p.name]);
+    const commentedPins = g.pins.filter(p =>  p.optional && !optEnabled[p.name]);
+
+    // Compute column alignment for #define names
+    const maxLen = activePins.reduce((m, p) => Math.max(m, p.name.length), 0);
+    const pad    = Math.max(maxLen + 4, 16); // at least 16 chars for aesthetics
+
+    out += `\n`;
+    out += `// =====================================================\n`;
+    out += `// ${g.title.toUpperCase()}\n`;
+    out += `// =====================================================\n`;
+
+    activePins.forEach(p => {
+      const { valid, value } = validatePin(values[p.name], logical);
+      out += `#define ${padRight(p.name, pad)}${valid ? value : values[p.name]}\n`;
+    });
+
+    commentedPins.forEach(p => {
+      out += `// #define ${padRight(p.name, pad)}${p.def}  // Uncomment to enable\n`;
+    });
+  });
+
+  out += `\n`;
+  out += `#endif // PIN_CONFIG_H\n`;
+  return out;
+}
+
+function isAllDefaults() {
+  return PIN_GROUPS.every(g =>
+    g.pins.every(p => {
+      if (p.optional) return !optEnabled[p.name]; // default = disabled
+      return String(values[p.name]) === String(p.def);
+    })
+  );
+}
+
+function downloadConfig() {
+  if (isAllDefaults()) { showDefaultsModal(); return; }
+  doDownload();
+  showDirectionsModal();
+}
+
+function doDownload() {
+  const content = generateFileContent();
+  const blob    = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url     = URL.createObjectURL(blob);
+  const a       = document.createElement('a');
+  a.href        = url;
+  a.download    = 'pin_config.user.h';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function showDefaultsModal() {
+  document.getElementById('defaultsModal').style.display = 'flex';
+}
+
+function closeDefaultsModal() {
+  document.getElementById('defaultsModal').style.display = 'none';
+}
+
+function showDirectionsModal() {
+  document.getElementById('directionsModal').style.display = 'flex';
+}
+
+function closeDirectionsModal() {
+  document.getElementById('directionsModal').style.display = 'none';
+}
+
+// ─────────────────────────────────────────────────────── FILE LOAD
+
+function triggerFileLoad() {
+  document.getElementById('configFileInput').click();
+}
+
+function handleFileLoad(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const count = parseConfigFile(e.target.result);
+    showLoadBanner(count, file.name);
+    render();
+    updateStatus();
+  };
+  reader.readAsText(file);
+  event.target.value = ''; // reset so same file can be reloaded
+}
+
+function parseConfigFile(text) {
+  // Reset everything to defaults first so the file represents a clean state
+  PIN_GROUPS.forEach(g => g.pins.forEach(p => {
+    values[p.name] = p.def;
+    if (p.optional) optEnabled[p.name] = false;
+  }));
+
+  let loaded = 0;
+  text.split('\n').forEach(line => {
+    const t = line.trim();
+    // Skip blank lines, block comments, and line comments
+    if (!t || t.startsWith('//') || t.startsWith('*') || t.startsWith('/*')) return;
+    // Match:  #define   NAME   VALUE   (optional trailing comment ignored)
+    const m = t.match(/^#define\s+(\w+)\s+([A-Za-z0-9]+)/);
+    if (!m) return;
+    const [, name, raw] = m;
+    if (!PIN_MAP.has(name)) return;                          // unknown pin name
+    const { pin, group } = PIN_MAP.get(name);
+    const { valid, value } = validatePin(raw, !group.physical);
+    if (!valid) return;
+    values[name] = value;
+    if (pin.optional) optEnabled[name] = true;              // uncommented → enable it
+    loaded++;
+  });
+
+  return loaded;
+}
+
+function showLoadBanner(count, filename) {
+  const el = document.getElementById('loadBanner');
+  if (count > 0) {
+    el.className = 'load-banner load-banner-ok visible';
+    el.innerHTML = `<strong>${count} pin assignment${count !== 1 ? 's' : ''} loaded</strong>`
+                 + ` from <code>${filename}</code>`;
+  } else {
+    el.className = 'load-banner load-banner-warn visible';
+    el.innerHTML = `No recognised pin assignments found in <code>${filename}</code>`;
+  }
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('visible'), 6000);
+}
+
+// ─────────────────────────────────────────────────────── INIT
+
+buildBoardDiagram();
+render();
+updateStatus();
+</script>
+
+<div class="board-tooltip" id="boardTooltip"></div>
+<div class="load-banner" id="loadBanner"></div>
+
+<div class="modal-backdrop" id="defaultsModal" style="display:none"
+     onclick="if(event.target===this)closeDefaultsModal()">
+  <div class="modal-box">
+    <div class="modal-icon">✓</div>
+    <h3>You're using all defaults</h3>
+    <p>Every pin value matches <code>pin_config.h</code> exactly — you don't need a
+      <code>pin_config.user.h</code> override file. The sketch will use the defaults
+      automatically.</p>
+    <p class="modal-sub">If you previously created a <code>pin_config.user.h</code>, you can
+      delete it so the sketch falls back to <code>pin_config.h</code> on its own.</p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeDefaultsModal()">Got it</button>
+      <button class="btn btn-primary" onclick="closeDefaultsModal(); doDownload(); showDirectionsModal()">Download anyway</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="directionsModal" style="display:none"
+     onclick="if(event.target===this)closeDirectionsModal()">
+  <div class="modal-box">
+    <div class="modal-icon">⬇</div>
+    <h3>File downloaded!</h3>
+    <p>Your <code>pin_config.user.h</code> file has been saved. Here's how to use it:</p>
+    <ol style="margin:0 0 10px;padding-left:20px;font-size:13px;color:var(--text-muted);line-height:1.8">
+      <li>Locate the downloaded <code>pin_config.user.h</code> file (usually in your Downloads folder).</li>
+      <li>Copy it into your sketch folder — either or both of:
+        <div style="margin:6px 0 2px;display:flex;flex-direction:column;gap:4px">
+          <code style="background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:3px 8px;font-size:12px">Everything/pin_config.user.h</code>
+          <code style="background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:3px 8px;font-size:12px">Master_Test/pin_config.user.h</code>
+        </div>
+      </li>
+      <li>Open the sketch (Everything or Master_Test) in the Arduino IDE and upload the code to the Arduino — no other changes needed.</li>
+    </ol>
+    <p class="modal-sub">The sketch automatically uses this file when it is present in the sketch folder.</p>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="closeDirectionsModal()">Got it</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>
