@@ -2,6 +2,12 @@
 
 ## Version 1.2.0 - 2026-02-19
 
+### Fixed
+- Fixed scoremore ACK code with strikes
+- Fixed config to load only overrides in user level configs
+
+## Version 1.2.0 - 2026-02-19
+
 ### Added
 - `pin_config.h` — hardware pin assignments extracted from inline defines, matching the test script pattern
 - `general_config.h` — all user-adjustable settings (servo angles, LED lengths, timing constants) extracted into a shared config file
