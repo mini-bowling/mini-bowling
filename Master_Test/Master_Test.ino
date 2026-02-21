@@ -12,11 +12,14 @@
 
 // Configuration files
 #if __has_include("pin_config.user.h")
+  #include "pin_config.h"
   #include "pin_config.user.h"
 #else
   #include "pin_config.h"
 #endif
+
 #if __has_include("general_config.user.h")
+  #include "general_config.h"
   #include "general_config.user.h"
 #else
   #include "general_config.h"
@@ -377,7 +380,7 @@ void updateSweepTween() {
 // =====================================================
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(SCOREMORE_BAUD);
   delay(1000);
 
   Serial.println(F(""));

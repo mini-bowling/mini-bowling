@@ -2,6 +2,12 @@
 
 All notable changes to the Master Test Script will be documented in this file.
 
+## [v1.4.2] - 2026-02-21
+
+### Fixed
+- Fixed config to load only overrides in user level configs
+- Fixed test script to set baud from general_config
+
 ## [v1.4.1] - 2026-02-18
 
 ### Changed

@@ -22,11 +22,13 @@
 #include <Servo.h>
 #include <AccelStepper.h>
 #if __has_include("pin_config.user.h")
+  #include "pin_config.h"
   #include "pin_config.user.h"
 #else
   #include "pin_config.h"
 #endif
 #if __has_include("general_config.user.h")
+  #include "general_config.h"
   #include "general_config.user.h"
 #else
   #include "general_config.h"
