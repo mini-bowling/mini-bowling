@@ -1006,10 +1006,8 @@ int separate (String &str, char **p, int size, char** pdata, char separator){
   return n;
 }  
 
-
 void handleCommand(String cmd){
   cmd.trim();
-
   if(cmd.startsWith("SET_INPUT:")){
     int scoreMorePin=cmd.substring(10).toInt();
     int pin=resolveArduinoPin(scoreMorePin);
@@ -1018,6 +1016,8 @@ void handleCommand(String cmd){
         if(isBowlingPin(scoreMorePin)) pinMode(pin, INPUT_PULLUP); else pinMode(pin, INPUT_PULLUP);
         inputPins[inputCount]=pin; pinStates[inputCount]=digitalRead(pin); inputCount++;
         Serial.print("ACK_SET_INPUT:"); Serial.println(scoreMorePin);
+      } else {
+        Serial.print("ACK_INPUT_ALREADY_SET:"); Serial.println(scoreMorePin);
       }
     } else {
         Serial.print("ACK_SET_INPUT_INVALID_PIN:"); Serial.println(scoreMorePin);
@@ -1031,7 +1031,6 @@ void handleCommand(String cmd){
     } else {
       Serial.print("ACK_SET_OUTPUT_INVALID_PIN:"); Serial.println(scoreMorePin);
     }
-
   } else if(cmd.startsWith("WRITE:")){
     int firstColon=cmd.indexOf(':'), secondColon=cmd.indexOf(':', firstColon+1);
     if(firstColon>0 && secondColon>firstColon){
@@ -1040,7 +1039,6 @@ void handleCommand(String cmd){
       int pin=resolveArduinoPin(scoreMorePin);
       if(pin!=-1){
         digitalWrite(pin, value);
-
         // Strike (ScoreMore logical pin 10)
         if(scoreMorePin==SM_STRIKE_LIGHT){
           bool prev=strikeLightOn;
@@ -1050,7 +1048,6 @@ void handleCommand(String cmd){
           }
           if(prev && !strikeLightOn){ strikeEdgeLatched=false; }
         }
-
         // Fill-ball grant (ScoreMore logical pin 7)
         else if (scoreMorePin==SM_AUTO_RESET){
           bool prev = autoResetFillBall;
@@ -1059,11 +1056,9 @@ void handleCommand(String cmd){
             autoResetFillBall = true;
             autoResetEdgeLatched = true;
             inFillBall = true;
-
             for(int i=0;i<LANE_LED_LENGTH_L;i++) laneL.setPixelColor(i, C_GREEN(laneL));
             for(int i=0;i<LANE_LED_LENGTH_R;i++) laneR.setPixelColor(i, C_GREEN(laneR));
             laneShowOnly();
-
             Serial.println("AUTO_RESET_FILL_BALL_ARMED (GREEN ON)");
           }
           if(prev && !isHigh){
@@ -1100,7 +1095,10 @@ void handleCommand(String cmd){
       Serial.println("ACK_NO_PINSETTER_COMMAND_GIVEN");
     }
     freeData(&strData);
-  } else {Serial.println("ACK_UNKNOWN_COMMAND");Serial.print("DEBUG: unknow command:");Serial.println(cmd);}}
+  } else {
+    Serial.println("ACK_UNKNOWN_COMMAND");Serial.print("DEBUG: unknow command:");Serial.println(cmd);
+  }
+}
 
 void checkInputChanges(){
   for(int i=0;i<inputCount;i++){
