@@ -161,8 +161,8 @@ int inputPins[maxPins], pinStates[maxPins], inputCount=0;
 // ======================= TURRET / STEPPER =======================
 AccelStepper stepper1(1, STEP_PIN, DIR_PIN);
 
-bool ninthSettleActive=false, catchDelayActive=false, releaseDwellActive=false;
-unsigned long ninthSettleStart=0, catchDelayStart=0, releaseDwellStart=0;
+bool releaseDwellActive=false;
+unsigned long releaseDwellStart=0;
 
 // Pin positions
 const int PinPositions[]={PIN_POS_0, PIN_POS_1, PIN_POS_2, PIN_POS_3, PIN_POS_4, PIN_POS_5, PIN_POS_6, PIN_POS_7, PIN_POS_8, PIN_POS_9, PIN_POS_10};
@@ -186,7 +186,7 @@ unsigned long lastPinCatchMs = 0;
 // Non-blocking homing
 bool homingActive=false, postDropHomePending=false;
 enum HomingPhase {
-  HOME_IDLE=0, HOME_PREP_MOVE_TO_SLOT1, HOME_ADVANCE_TO_SWITCH,
+  HOME_IDLE=0, HOME_CHECK_INITIAL_SENSOR, HOME_PREP_MOVE_TO_SLOT1, HOME_ADVANCE_TO_SWITCH,
   HOME_BACKOFF, HOME_CREEP_TO_SWITCH, HOME_SETZERO_AND_MOVE_SLOT1, HOME_DONE
 };
 HomingPhase homingPhase=HOME_IDLE;
@@ -721,20 +721,6 @@ void runTurret(){
     }
   }
 
-  // Catch delay for 1..8
-  if(catchDelayActive && (millis()-catchDelayStart>=CATCH_DELAY_MS)){
-    catchDelayActive=false;
-    if(NowCatching>=1 && NowCatching<=8){
-      NowCatching++; if(NowCatching>9) NowCatching=9;
-      goTo(PinPositions[NowCatching]);
-    }
-  }
-
-  // 9th settle
-  if(ninthSettleActive && (millis()-ninthSettleStart>=NINTH_SETTLE_MS)){
-    ninthSettleActive=false;
-  }
-
   // Finish dwell (10th dropped)
   if(releaseDwellActive && (millis()-releaseDwellStart>=RELEASE_DWELL_MS)){
     releaseDwellActive=false;
@@ -763,8 +749,8 @@ void servicePinQueue(){
   // Don't start a new catch while in dwell, hold, or homing
   if (releaseDwellActive || conesFullHold || homingActive) return;
 
-  // Only handle a new pin when turret is idle and not in catch delay
-  if (moving || catchDelayActive) return;
+  // Only handle a new pin when turret is idle
+  if (moving) return;
 
   // Safe: handle exactly ONE queued pin now
   queuedPinEvents--;
@@ -777,9 +763,11 @@ void onPinDetected(){
   if(loadedCount<9){
     loadedCount++;
     if(NowCatching>=1 && NowCatching<=8){
-      catchDelayActive=true; catchDelayStart=millis();
+      // Advance turret immediately - pin settles in slot while turret moves to the next position
+      NowCatching++; if(NowCatching>9) NowCatching=9;
+      goTo(PinPositions[NowCatching]);
     }else{
-      ninthSettleActive=true; ninthSettleStart=millis();
+      // 9th pin loaded - arm conesFullHold if needed, then wait for 10th
       if(deckConeCount==10){
         conesFullHoldArmed=true;
         conesFullHoldStartMs=millis();
@@ -823,15 +811,40 @@ void goTo(long pos){
 
 // ---------- Non-blocking homing ----------
 void startHomeTurret(){
-  homingActive=true; homingPhase=HOME_PREP_MOVE_TO_SLOT1;
+  homingActive=true;
   ConveyorOff();
   stepper1.setAcceleration(3000); stepper1.setMaxSpeed(500);
-  goTo(PinPositions[1]);
+
+  if(digitalRead(HALL_EFFECT_PIN)==LOW){
+    // Sensor already triggered - nudge CW to determine if we're at the correct home
+    // position or at the CCW physical stop (which also engages the sensor)
+    homingPhase=HOME_CHECK_INITIAL_SENSOR;
+    goTo(stepper1.currentPosition()+100);
+  }else{
+    homingPhase=HOME_PREP_MOVE_TO_SLOT1;
+    goTo(PinPositions[1]);
+  }
 }
 
 void runHomingFSM(){
   if(!homingActive) return;
   switch(homingPhase){
+    case HOME_CHECK_INITIAL_SENSOR:
+      if(digitalRead(HALL_EFFECT_PIN)==HIGH){
+        // Sensor disengaged during CW nudge - turret was at CCW physical stop, not home.
+        // Stop and continue CW all the way around to find home from the correct direction.
+        stepper1.stop();
+        stepper1.setCurrentPosition(stepper1.currentPosition());
+        moving=false;
+        homingPhase=HOME_ADVANCE_TO_SWITCH;
+        goTo(stepper1.currentPosition()+3000); // Large move; FSM stops on sensor detect
+      }else if(stepper1.distanceToGo()==0){
+        // Full nudge done, sensor still active - at correct home position, back off and creep
+        homingPhase=HOME_BACKOFF;
+        goTo(stepper1.currentPosition()-150);
+      }
+      break;
+
     case HOME_PREP_MOVE_TO_SLOT1:
       if(stepper1.distanceToGo()==0){ homingPhase=HOME_ADVANCE_TO_SWITCH; }
       break;
@@ -911,7 +924,6 @@ void updateConveyorOutput(){
   if(!homingActive){
     need =
       (turretFillTo9Requested && (loadedCount<9)) ||
-      (ninthSettleActive) ||
       ((loadedCount==9) && deckIsUp && !releaseDwellActive &&
        (turretReleaseRequested || backgroundRefillRequested));
 
