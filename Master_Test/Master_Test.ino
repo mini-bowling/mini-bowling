@@ -1,5 +1,5 @@
 // =====================================================
-// MASTER TEST SCRIPT v1.4 - Pinsetter Component Tester
+// MASTER TEST SCRIPT v1.2.2 - Pinsetter Component Tester
 // Consolidated test script for all pinsetter components
 //
 // Type 'help' for main menu, 'back' to return from sub-menus
@@ -385,7 +385,7 @@ void setup() {
 
   Serial.println(F(""));
   Serial.println(F("========================================"));
-  Serial.println(F("   MASTER TEST SCRIPT v1.4"));
+  Serial.println(F("   MASTER TEST SCRIPT v1.2.2"));
   Serial.println(F("   Pinsetter Component Tester"));
   Serial.println(F("========================================"));
   Serial.println(F(""));

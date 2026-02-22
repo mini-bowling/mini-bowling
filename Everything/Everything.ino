@@ -35,7 +35,7 @@
 #endif
 
 // Current version, will be used by Scoremore to determine supported features
-#define VERSION "1.2.1"
+#define VERSION "1.2.2"
 
 Adafruit_NeoPixel deckL(DECK_LED_LENGTH_L, DECK_PIN_L, NEO_GRB + NEO_KHZ800);
 Adafruit_NeoPixel deckR(DECK_LED_LENGTH_R, DECK_PIN_R, NEO_GRB + NEO_KHZ800);

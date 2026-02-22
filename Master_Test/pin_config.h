@@ -7,9 +7,6 @@
 // That file will be used instead and is ignored by git.
 // =====================================================
 
-#ifndef PIN_CONFIG_H
-#define PIN_CONFIG_H
-
 // =====================================================
 // STEPPER MOTOR PINS
 // =====================================================
@@ -81,5 +78,3 @@
 #define SM_FIRST_BALL       11
 #define SM_SECOND_BALL      12
 #define SM_PINSETTER_RESET  20
-
-#endif // PIN_CONFIG_H

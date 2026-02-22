@@ -4,9 +4,6 @@
 // Copy to general_config.user.h and customize for your machine.
 // =====================================================
 
-#ifndef GENERAL_CONFIG_H
-#define GENERAL_CONFIG_H
-
 // =====================================================
 // SCOREMORE SERIAL BAUD RATE
 // =====================================================
@@ -196,5 +193,3 @@
 
 // Frame LED blink interval
 #define FRAME_BLINK_INTERVAL    500   // DEFAULT: 500
-
-#endif // GENERAL_CONFIG_H

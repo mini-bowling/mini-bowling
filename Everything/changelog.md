@@ -1,5 +1,14 @@
 # Everything Script - Changelog
 
+## Version 1.2.2 - 2026-02-21
+
+### Changed
+- Version numbering is now kept in sync between Master Test and Everything scripts
+- `general_config.h` and `pin_config.h` no longer use a file-level `#ifndef` guard, so user config files (`.user.h`) now properly override default values when present
+
+### Migration
+- If you have a `general_config.user.h` or `pin_config.user.h`, re-copy it from the corresponding default config file to remove the `#ifndef`/`#define` guard at the top of the file (e.g. `#ifndef GENERAL_CONFIG_H` / `#define GENERAL_CONFIG_H`). Only your customized values need to remain in the user file.
+
 ## Version 1.2.0 - 2026-02-19
 
 ### Fixed
