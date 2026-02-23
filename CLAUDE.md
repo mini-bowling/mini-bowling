@@ -176,6 +176,40 @@ The turret loading logic in the test script mirrors how `Everything.ino` loads p
 - Everything has complex background refill logic with `backgroundRefillRequested`, `conesFullHold`, etc.; the test script does a single load-and-release cycle
 - Everything tracks `loadedCount`, `NowCatching`, `queuedPinEvents` globally; the test script uses `tl`-prefixed local state
 
+## Test Script: Pin Pickup Sequence (Automated)
+
+The pin pickup sequence picks up pins from the lane using the scissor deck. Accessed via the **Sequence** menu (`sq` from main menu), then `pp`/`pinpickup`. The user is asked to confirm pins are on the lane and the scissors are empty before starting.
+
+### Sequence steps:
+1. **Scissor open** — Move scissor to `SCISSOR_DROP_ANGLE`. Wait `PDROP_SETTLE_MS`.
+2. **Raise to grab height** — Lower deck to `RAISE_GRAB_ANGLE`. Wait `PDROP_RAISE_SETTLE_MS`.
+3. **Scissor close (grab)** — Move scissor to `SCISSOR_GRAB_ANGLE` to grip pins. Wait `PDROP_SETTLE_MS`.
+4. **Raise up** — Lift deck to `RAISE_UP_ANGLE`. Wait `PDROP_RAISE_SETTLE_MS`.
+5. **Done.**
+
+## Test Script: Pin Set Sequence (Automated)
+
+The pin set sequence releases pins held in the scissor deck back onto the lane. It is the complement to pin pickup. Accessed via the **Sequence** menu, then `ps`/`pinset`. The user is asked to confirm the lane is clear (no pins on lane) before starting.
+
+### Sequence steps:
+1. **Raise to drop height** — Lower deck to `RAISE_DROP_ANGLE`. Wait `PDROP_RAISE_SETTLE_MS`.
+2. **Scissor open (release)** — Move scissor to `SCISSOR_DROP_ANGLE` to release pins onto the lane. Wait `PDROP_SETTLE_MS`.
+3. **Raise up** — Lift deck to `RAISE_UP_ANGLE`. Wait `PDROP_RAISE_SETTLE_MS`.
+4. **Done.**
+
+Note: `RAISE_DROP_ANGLE` is the partial drop height used specifically for the re-drop/set scenario, not `RAISE_DOWN_ANGLE` (which is used only for setting pins from the sliding deck).
+
+## Test Script: Pin Cycle Sequence (Automated)
+
+The pin cycle sequence repeatedly alternates between pin pickup and pin set until stopped with `x`. Accessed via the **Sequence** menu, then `pc`/`pincycle`. The user is asked for the same confirmation as pin pickup **once**, then the cycle runs autonomously.
+
+### Cycle order:
+1. Pin Pickup (picks up pins from lane)
+2. Pin Set (sets them back down)
+3. Repeat from 1 until `x` is pressed.
+
+The cycle uses the same FSMs as the standalone pinpickup and pinset sequences, driven by the `pinCycleActive` flag that causes each sequence's `DONE` phase to auto-launch the next sequence.
+
 ## Test Script: Code Architecture
 
 ### Menu System
