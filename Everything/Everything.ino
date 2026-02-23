@@ -21,6 +21,7 @@
 #include <Adafruit_NeoPixel.h>
 #include <Servo.h>
 #include <AccelStepper.h>
+#include <limits.h>
 #if __has_include("pin_config.user.h")
   #include "pin_config.h"
   #include "pin_config.user.h"
@@ -36,6 +37,13 @@
 
 // Current version, will be used by Scoremore to determine supported features
 #define VERSION "1.2.2"
+
+// ======================= LOOP TIMING DEBUG =======================
+#define DEBUG_LOOP_TIMING  // Comment out to disable
+#ifdef DEBUG_LOOP_TIMING
+unsigned long _loopMax=0, _loopMin=ULONG_MAX, _loopSum=0, _loopCount=0, _loopReportMs=0;
+unsigned long _tmSweep=0, _tmTurret=0, _tmConv=0, _tmDoor=0, _tmLane=0, _tmSerial=0, _tmBall=0, _tmSeq=0;
+#endif
 
 Adafruit_NeoPixel deckL(DECK_LED_LENGTH_L, DECK_PIN_L, NEO_GRB + NEO_KHZ800);
 Adafruit_NeoPixel deckR(DECK_LED_LENGTH_R, DECK_PIN_R, NEO_GRB + NEO_KHZ800);
@@ -161,8 +169,8 @@ int inputPins[maxPins], pinStates[maxPins], inputCount=0;
 // ======================= TURRET / STEPPER =======================
 AccelStepper stepper1(1, STEP_PIN, DIR_PIN);
 
-bool releaseDwellActive=false;
-unsigned long releaseDwellStart=0;
+bool catchDelayActive=false, ninthSettleActive=false, releaseDwellActive=false;
+unsigned long catchDelayStart=0, ninthSettleStart=0, releaseDwellStart=0;
 
 // Pin positions
 const int PinPositions[]={PIN_POS_0, PIN_POS_1, PIN_POS_2, PIN_POS_3, PIN_POS_4, PIN_POS_5, PIN_POS_6, PIN_POS_7, PIN_POS_8, PIN_POS_9, PIN_POS_10};
@@ -326,7 +334,9 @@ void setup(){
   // Initial home (blocking only here)
   startHomeTurret();
   while(homingActive){
-    runTurret(); updateConveyorOutput(); updateBallReturnDoor(); updateSweepTween(); laneUpdate(); delay(1);
+    runTurret(); updateConveyorOutput(); updateBallReturnDoor(); updateSweepTween(); laneUpdate();
+    stepper1.run();  // After NeoPixel show()
+    delay(1);
   }
 
   NowCatching=1; goTo(PinPositions[1]); loadedCount=0;
@@ -345,28 +355,69 @@ void setup(){
   lastBallActivityMs = millis();
 
   updateFrameLEDs();
+
+#ifdef DEBUG_LOOP_TIMING
+  Serial.println("DEBUG:LOOP_STARTING");
+#endif
 }
 
 // ======================= LOOP =======================
 void loop(){
+#ifdef DEBUG_LOOP_TIMING
+  unsigned long _loopStart=micros();
+  unsigned long _s;
+#endif
+  stepper1.run();  // Extra call at top of loop for responsiveness
   unsigned long now=millis();
 
+#ifdef DEBUG_LOOP_TIMING
+  _s=micros();
+#endif
   updateSweepTween();
+#ifdef DEBUG_LOOP_TIMING
+  { unsigned long _d=micros()-_s; if(_d>_tmSweep) _tmSweep=_d; }
+  _s=micros();
+#endif
   runTurret();
+#ifdef DEBUG_LOOP_TIMING
+  { unsigned long _d=micros()-_s; if(_d>_tmTurret) _tmTurret=_d; }
+  _s=micros();
+#endif
   updateConveyorOutput();
+#ifdef DEBUG_LOOP_TIMING
+  { unsigned long _d=micros()-_s; if(_d>_tmConv) _tmConv=_d; }
+  _s=micros();
+#endif
   updateBallReturnDoor();
+#ifdef DEBUG_LOOP_TIMING
+  { unsigned long _d=micros()-_s; if(_d>_tmDoor) _tmDoor=_d; }
+  _s=micros();
+#endif
   laneUpdate();
+  stepper1.run();  // Extra call after laneUpdate() - NeoPixel show() disables interrupts
+#ifdef DEBUG_LOOP_TIMING
+  { unsigned long _d=micros()-_s; if(_d>_tmLane) _tmLane=_d; }
+#endif
 
   scoremoreBallPulse_update();
 
   if(refillLockActive && deckConeCount==10){ refillLockActive=false; }
 
   if(now - prevScoreMillis >= SCORE_INTERVAL){
+#ifdef DEBUG_LOOP_TIMING
+    _s=micros();
+#endif
     prevScoreMillis=now; checkSerial(); checkInputChanges();
+#ifdef DEBUG_LOOP_TIMING
+    { unsigned long _d=micros()-_s; if(_d>_tmSerial) _tmSerial=_d; }
+#endif
   }
 
   // ======================= PAUSE MODE (NEW) =======================
   // If paused: a fresh IR beam-break edge resumes play.
+#ifdef DEBUG_LOOP_TIMING
+  _s=micros();
+#endif
   if(pauseMode){
     if(pinEdgeArmed && irStableState==LOW){
       pinEdgeArmed = false;     // consume this edge
@@ -417,15 +468,48 @@ void loop(){
   }
   if(!ballRearmed && (millis()-lastBallHighMs>=BALL_REARM_MS) && rawBall==HIGH){ ballRearmed=true; }
   ballPrev=rawBall;
+#ifdef DEBUG_LOOP_TIMING
+  { unsigned long _d=micros()-_s; if(_d>_tmBall) _tmBall=_d; }
+#endif
 
   if(stepIndex>0){
+#ifdef DEBUG_LOOP_TIMING
+    _s=micros();
+#endif
      runSequence();
+#ifdef DEBUG_LOOP_TIMING
+    { unsigned long _d=micros()-_s; if(_d>_tmSeq) _tmSeq=_d; }
+#endif
   } else {
     if(pinsetterResetRequested) {  //if the reset button has been pressed and no other sequences are queued
       stepIndex=22;       //trigger reset of the lane
       pinsetterResetRequested=false;
     }
   }
+
+#ifdef DEBUG_LOOP_TIMING
+  unsigned long _loopTime=micros()-_loopStart;
+  if(_loopTime>_loopMax) _loopMax=_loopTime;
+  if(_loopTime<_loopMin) _loopMin=_loopTime;
+  _loopSum+=_loopTime; _loopCount++;
+  if(millis()-_loopReportMs>=5000){
+    _loopReportMs=millis();
+    Serial.print("DEBUG:LOOP_US max="); Serial.print(_loopMax);
+    Serial.print(" min="); Serial.print(_loopMin);
+    Serial.print(" avg="); Serial.print(_loopCount?_loopSum/_loopCount:0);
+    Serial.print(" n="); Serial.println(_loopCount);
+    Serial.print("DEBUG:SECTION_US sweep="); Serial.print(_tmSweep);
+    Serial.print(" turret="); Serial.print(_tmTurret);
+    Serial.print(" conv="); Serial.print(_tmConv);
+    Serial.print(" door="); Serial.print(_tmDoor);
+    Serial.print(" lane="); Serial.print(_tmLane);
+    Serial.print(" serial="); Serial.print(_tmSerial);
+    Serial.print(" ball="); Serial.print(_tmBall);
+    Serial.print(" seq="); Serial.println(_tmSeq);
+    _loopMax=0; _loopMin=ULONG_MAX; _loopSum=0; _loopCount=0;
+    _tmSweep=0; _tmTurret=0; _tmConv=0; _tmDoor=0; _tmLane=0; _tmSerial=0; _tmBall=0; _tmSeq=0;
+  }
+#endif
 }
 
 // ======================= SEQUENCER =======================
@@ -623,6 +707,7 @@ void PrimeFullRackAndSetLaneOnce(){
   releaseDwellActive=false; turretReleaseRequested=false;
   while(loadedCount<9){
     runTurret(); updateConveyorOutput(); updateBallReturnDoor(); updateSweepTween(); laneUpdate();
+    stepper1.run();  // After NeoPixel show()
     if(millis()-prevScoreMillis>=SCORE_INTERVAL){
       prevScoreMillis=millis(); checkSerial(); checkInputChanges();
     }
@@ -632,6 +717,7 @@ void PrimeFullRackAndSetLaneOnce(){
   startTurretReleaseCycle();
   while(!dropCycleJustFinished){
     runTurret(); updateConveyorOutput(); updateBallReturnDoor(); updateSweepTween(); laneUpdate();
+    stepper1.run();  // After NeoPixel show()
     if(millis()-prevScoreMillis>=SCORE_INTERVAL){
       prevScoreMillis=millis(); checkSerial(); checkInputChanges();
     }
@@ -721,6 +807,20 @@ void runTurret(){
     }
   }
 
+  // Catch delay for slots 1-8: wait for pin to settle, then advance to next slot
+  if(catchDelayActive && (millis()-catchDelayStart>=CATCH_DELAY_MS)){
+    catchDelayActive=false;
+    if(NowCatching>=1 && NowCatching<=8){
+      NowCatching++; if(NowCatching>9) NowCatching=9;
+      goTo(PinPositions[NowCatching]);
+    }
+  }
+
+  // 9th pin settle
+  if(ninthSettleActive && (millis()-ninthSettleStart>=NINTH_SETTLE_MS)){
+    ninthSettleActive=false;
+  }
+
   // Finish dwell (10th dropped)
   if(releaseDwellActive && (millis()-releaseDwellStart>=RELEASE_DWELL_MS)){
     releaseDwellActive=false;
@@ -749,8 +849,8 @@ void servicePinQueue(){
   // Don't start a new catch while in dwell, hold, or homing
   if (releaseDwellActive || conesFullHold || homingActive) return;
 
-  // Only handle a new pin when turret is idle
-  if (moving) return;
+  // Only handle a new pin when turret is idle and not in catch delay
+  if (moving || catchDelayActive) return;
 
   // Safe: handle exactly ONE queued pin now
   queuedPinEvents--;
@@ -763,11 +863,11 @@ void onPinDetected(){
   if(loadedCount<9){
     loadedCount++;
     if(NowCatching>=1 && NowCatching<=8){
-      // Advance turret immediately - pin settles in slot while turret moves to the next position
-      NowCatching++; if(NowCatching>9) NowCatching=9;
-      goTo(PinPositions[NowCatching]);
+      // Start catch delay - turret advances to next slot after pin has settled
+      catchDelayActive=true; catchDelayStart=millis();
     }else{
-      // 9th pin loaded - arm conesFullHold if needed, then wait for 10th
+      // 9th pin loaded - settle briefly, arm conesFullHold if needed, then wait for 10th
+      ninthSettleActive=true; ninthSettleStart=millis();
       if(deckConeCount==10){
         conesFullHoldArmed=true;
         conesFullHoldStartMs=millis();
@@ -1209,6 +1309,7 @@ void pumpAll(unsigned long ms){
   unsigned long t0=millis();
   while(millis()-t0<ms){
     runTurret(); updateConveyorOutput(); updateBallReturnDoor(); updateSweepTween(); laneUpdate();
+    stepper1.run();  // After NeoPixel show()
     if(millis()-prevScoreMillis>=SCORE_INTERVAL){
       prevScoreMillis=millis(); checkSerial(); checkInputChanges();
     }
