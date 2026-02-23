@@ -136,7 +136,6 @@ long turretTargetPos = 0;
 // Homing state machine
 enum HomingPhase {
   HOME_IDLE = 0,
-  HOME_PREP_MOVE_TO_SLOT1,
   HOME_ADVANCE_TO_SWITCH,
   HOME_BACKOFF,
   HOME_CREEP_TO_SWITCH,
@@ -145,6 +144,13 @@ enum HomingPhase {
 };
 HomingPhase homingPhase = HOME_IDLE;
 bool homingActive = false;
+// After turret load release, the turret is right next to the hall sensor magnet.
+// When re-homing, the advance phase could immediately re-trigger the same magnet
+// instead of finding it after a full revolution. homingMinSteps tells the advance
+// phase to ignore the hall sensor until the turret has moved at least that many
+// steps, ensuring it clears the nearby magnet before searching for it properly.
+long homingStartPos = 0;
+long homingMinSteps = 0;
 
 // Sweep Clear state machine (shared by sweep sequence + pin drop pre/post clear)
 enum SweepClearPhase {
@@ -165,6 +171,8 @@ unsigned long sweepClearPhaseMs = 0;
 enum PinDropPhase {
   PDROP_IDLE = 0,
   PDROP_PRECLEAR_WAIT,
+  PDROP_SWEEP_GUARD,
+  PDROP_SWEEP_GUARD_WAIT,
   PDROP_SCISSOR_OPEN,
   PDROP_RAISE_DOWN,
   PDROP_SLIDER_RELEASE,
@@ -184,10 +192,41 @@ enum SequencePrompt {
   SEQPROMPT_PD_PRECLEAR,
   SEQPROMPT_PD_POSTCLEAR,
   SEQPROMPT_TL_CONFIRM,
-  SEQPROMPT_TL_RESUME
+  SEQPROMPT_TL_RESUME,
+  SEQPROMPT_PP_READY,
+  SEQPROMPT_PS_CONFIRM,
+  SEQPROMPT_PC_READY
 };
 SequencePrompt seqPrompt = SEQPROMPT_NONE;
 bool pinDropPreClear = false;
+
+// Pin Pickup state machine
+enum PinPickupPhase {
+  PPU_IDLE = 0,
+  PPU_SCISSOR_OPEN,
+  PPU_RAISE_GRAB,
+  PPU_SCISSOR_CLOSE,
+  PPU_RAISE_UP,
+  PPU_DONE
+};
+PinPickupPhase pinPickupPhase = PPU_IDLE;
+bool pinPickupActive = false;
+unsigned long pinPickupPhaseStartMs = 0;
+
+// Pin Set state machine
+enum PinSetPhase {
+  PSET_IDLE = 0,
+  PSET_RAISE_DROP,
+  PSET_SCISSOR_OPEN,
+  PSET_RAISE_UP,
+  PSET_DONE
+};
+PinSetPhase pinSetPhase = PSET_IDLE;
+bool pinSetActive = false;
+unsigned long pinSetPhaseStartMs = 0;
+
+// Pin Cycle (repeating pickup + set)
+bool pinCycleActive = false;
 
 // Turret Load state machine
 enum TurretLoadPhase {
@@ -199,9 +238,9 @@ enum TurretLoadPhase {
   TLOAD_ADVANCING,
   TLOAD_NINTH_SETTLE,
   TLOAD_WAIT_TENTH,
-  TLOAD_MOVE_RELEASE,
+  TLOAD_TENTH_SETTLE,
   TLOAD_RELEASE_DWELL,
-  TLOAD_POST_HOMING,
+  TLOAD_MOVE_SLOT1,
   TLOAD_DONE
 };
 TurretLoadPhase turretLoadPhase = TLOAD_IDLE;
@@ -219,6 +258,7 @@ int tlIrStable = HIGH;
 unsigned long tlIrLastChange = 0;
 bool tlPinArmed = true;
 int tlQueuedPins = 0;
+bool tlConveyorStopped = false;
 
 // =====================================================
 // LED STRIP SELECTION
@@ -274,6 +314,9 @@ uint32_t C_OFF()   { return deckL.Color(0, 0, 0); }
 void ConveyorOn()  { digitalWrite(MOTOR_RELAY_PIN, CONVEYOR_ACTIVE_HIGH ? HIGH : LOW); }
 void ConveyorOff() { digitalWrite(MOTOR_RELAY_PIN, CONVEYOR_ACTIVE_HIGH ? LOW : HIGH); }
 
+// Forward declaration (default parameter requires declaration before first use)
+void startTurretHome(long minSteps = 0);
+
 // Strip selection helper strings
 String getStripSelectName(StripSelect sel) {
   switch (sel) {
@@ -311,20 +354,35 @@ void ensureSweepAttached() {
 }
 
 void ensureBallDoorAttached() {
-  if (!BallReturnServo.attached()) BallReturnServo.attach(BALL_RETURN_PIN);
+  if (!BallReturnServo.attached()) {
+    BallReturnServo.attach(BALL_RETURN_PIN);
+    BallReturnServo.write(ballDoorAngle);
+  }
 }
 
 void ensureScissorAttached() {
-  if (!ScissorsServo.attached()) ScissorsServo.attach(SCISSOR_PIN);
+  if (!ScissorsServo.attached()) {
+    ScissorsServo.attach(SCISSOR_PIN);
+    ScissorsServo.write(scissorAngle);
+  }
 }
 
 void ensureSliderAttached() {
-  if (!SlideServo.attached()) SlideServo.attach(SLIDE_PIN);
+  if (!SlideServo.attached()) {
+    SlideServo.attach(SLIDE_PIN);
+    SlideServo.write(sliderAngle);
+  }
 }
 
 void ensureRaiseAttached() {
-  if (!LeftRaiseServo.attached()) LeftRaiseServo.attach(RAISE_LEFT_PIN);
-  if (!RightRaiseServo.attached()) RightRaiseServo.attach(RAISE_RIGHT_PIN);
+  if (!LeftRaiseServo.attached()) {
+    LeftRaiseServo.attach(RAISE_LEFT_PIN);
+    LeftRaiseServo.write(raiseLeftPos);
+  }
+  if (!RightRaiseServo.attached()) {
+    RightRaiseServo.attach(RAISE_RIGHT_PIN);
+    RightRaiseServo.write(raiseRightPos);
+  }
 }
 
 // =====================================================
@@ -474,6 +532,14 @@ void loop() {
     runTurretLoadFSM();
   }
 
+  if (pinPickupActive) {
+    runPinPickupFSM();
+  }
+
+  if (pinSetActive) {
+    runPinSetFSM();
+  }
+
   // Check turret movement complete (suppress during automated sequences)
   if (turretMoving && stepper.distanceToGo() == 0) {
     turretMoving = false;
@@ -496,9 +562,7 @@ void loop() {
     String input = Serial.readStringUntil('\n');
     input.trim();
 
-    if (input.length() > 0) {
-      processCommand(input);
-    }
+    processCommand(input);
   }
 }
 
@@ -624,6 +688,23 @@ void stopAllSequences() {
     Serial.println(F(" pins in turret)"));
   }
 
+  if (pinPickupActive) {
+    pinPickupActive = false;
+    pinPickupPhase = PPU_IDLE;
+    Serial.println(F(">> Pin pickup sequence STOPPED"));
+  }
+
+  if (pinSetActive) {
+    pinSetActive = false;
+    pinSetPhase = PSET_IDLE;
+    Serial.println(F(">> Pin set sequence STOPPED"));
+  }
+
+  if (pinCycleActive) {
+    pinCycleActive = false;
+    Serial.println(F(">> Pin cycle STOPPED"));
+  }
+
   if (homingActive) {
     homingActive = false;
     homingPhase = HOME_IDLE;
@@ -640,9 +721,23 @@ void stopAllSequences() {
 void processCommand(String cmd) {
   cmd.toLowerCase();
 
+  // Empty input (bare Enter): if a y/n prompt is active, treat as 'y';
+  // otherwise stops any running sequence
+  if (cmd.length() == 0) {
+    if (seqPrompt != SEQPROMPT_NONE) {
+      cmd = "y";
+      // Fall through to menu handler
+    } else if (sweepClearActive || pinDropActive || turretLoadActive || homingActive || pinPickupActive || pinSetActive || pinCycleActive) {
+      stopAllSequences();
+      return;
+    } else {
+      return;
+    }
+  }
+
   // Global commands
   if (cmd == "x" || cmd == "stop") {
-    if (sweepClearActive || pinDropActive || turretLoadActive || homingActive) {
+    if (sweepClearActive || pinDropActive || turretLoadActive || homingActive || pinPickupActive || pinSetActive || pinCycleActive) {
       stopAllSequences();
       return;
     }
@@ -736,6 +831,7 @@ void printMainMenu() {
   Serial.println(F("  sequence (sq) - Run automated sequences"));
   Serial.println(F(""));
   Serial.println(F("  status (s)    - Show all sensor states"));
+  Serial.println(F("  disengage (di)- Disengage all servos & motors"));
   Serial.println(F("  help (h)      - Show this menu"));
   Serial.println(F(""));
   Serial.println(F("Sensors monitored: Hall(6), IR(5), BallTrig(A0), BallSpd(A1)"));
@@ -814,6 +910,22 @@ void handleMainMenu(String cmd) {
     currentMenu = MENU_SEQUENCE;
     Serial.println(F(">> Entering SEQUENCE menu"));
     printSequenceMenu();
+  }
+  else if (cmd == "disengage" || cmd == "di") {
+    stopAllSequences();
+    ConveyorOff();
+    conveyorIsOn = false;
+    ScissorsServo.detach();
+    SlideServo.detach();
+    LeftRaiseServo.detach();
+    RightRaiseServo.detach();
+    LeftSweepServo.detach();
+    RightSweepServo.detach();
+    BallReturnServo.detach();
+#ifdef STEPPER_ENABLE_PIN
+    stepper.disableOutputs();
+#endif
+    Serial.println(F(">> All servos and motors DISENGAGED"));
   }
   else {
     Serial.print(F("Unknown: "));
@@ -1928,7 +2040,8 @@ void handleTurretMenu(String cmd) {
   else if (cmd == "0") {
     long releasePos = PinPositions[10] + TURRET_PIN10_RELEASE_OFFSET;
     Serial.print(F(">> Moving to RELEASE: "));
-    Serial.println(releasePos);
+    Serial.print(releasePos);
+    Serial.println(F(" (spring-safe speed)"));
     stepper.setMaxSpeed(TURRET_SPRING_MAXSPEED);
     stepper.setAcceleration(TURRET_SPRING_ACCEL);
     turretGoTo(releasePos);
@@ -2016,13 +2129,34 @@ void turretMoveRelative(long steps) {
   turretGoTo(newPos);
 }
 
-void startTurretHome() {
+void startTurretHome(long minSteps) {
   Serial.println(F(">> Starting homing sequence..."));
   homingActive = true;
-  homingPhase = HOME_PREP_MOVE_TO_SLOT1;
+  homingMinSteps = minSteps;
   stepper.setAcceleration(3000);
   stepper.setMaxSpeed(500);
-  turretGoTo(PinPositions[1]);
+  turretTargetPos = stepper.currentPosition();  // Reset so first turretGoTo() isn't suppressed
+  homingStartPos = stepper.currentPosition();
+
+  if (minSteps > 0) {
+    // Caller knows we're near the magnet — advance past it first
+    Serial.print(F(">> Advancing past magnet (min "));
+    Serial.print(minSteps);
+    Serial.println(F(" steps)..."));
+    homingPhase = HOME_ADVANCE_TO_SWITCH;
+  } else {
+    int hallState = digitalRead(HALL_EFFECT_PIN);
+    if (hallState == LOW) {
+      // Hall sensor already engaged — back off first so we can re-find it precisely
+      Serial.println(F(">> Magnet detected at start, backing off..."));
+      homingPhase = HOME_BACKOFF;
+      turretGoTo(stepper.currentPosition() - 150);
+    } else {
+      // Hall sensor not engaged — go straight to searching for it (clockwise)
+      Serial.println(F(">> Advancing to find magnet..."));
+      homingPhase = HOME_ADVANCE_TO_SWITCH;
+    }
+  }
 }
 
 void runHomingFSM() {
@@ -2031,26 +2165,17 @@ void runHomingFSM() {
   int hallState = digitalRead(HALL_EFFECT_PIN);
 
   switch (homingPhase) {
-    case HOME_PREP_MOVE_TO_SLOT1:
-      if (hallState == LOW) {
-        // Hall sensor triggered during prep move - stop and back off
-        stepper.stop();
-        stepper.setCurrentPosition(stepper.currentPosition());
-        turretMoving = false;
-        Serial.println(F(">> Magnet found during prep! Backing off..."));
-        homingPhase = HOME_BACKOFF;
-        turretGoTo(stepper.currentPosition() - 150);
-      }
-      else if (stepper.distanceToGo() == 0) {
-        Serial.println(F(">> Advancing to find magnet..."));
-        homingPhase = HOME_ADVANCE_TO_SWITCH;
-      }
-      break;
+    case HOME_ADVANCE_TO_SWITCH: {
+      long traveled = stepper.currentPosition() - homingStartPos;
+      if (traveled < 0) traveled = -traveled;
+      bool pastMinSteps = (traveled >= homingMinSteps);
 
-    case HOME_ADVANCE_TO_SWITCH:
-      if (hallState == HIGH) {
+      if (!pastMinSteps || hallState == HIGH) {
         if (stepper.distanceToGo() == 0) {
-          turretGoTo(stepper.currentPosition() + 10);
+          // This was previously + 10, and we've increased this to + 2000. This is moving the turret
+          // a lot, instead of 10 steps at a time, and relying on the hall effect sensor to be
+          // triggered which will stop the turret. This makes the homing process go much faster.
+          turretGoTo(stepper.currentPosition() + 2000);
         }
       } else {
         Serial.println(F(">> Magnet found! Backing off..."));
@@ -2058,6 +2183,7 @@ void runHomingFSM() {
         turretGoTo(stepper.currentPosition() - 150);
       }
       break;
+    }
 
     case HOME_BACKOFF:
       if (stepper.distanceToGo() == 0) {
@@ -2110,12 +2236,15 @@ void runHomingFSM() {
 void printSequenceMenu() {
   Serial.println(F(""));
   Serial.println(F("======== SEQUENCE MENU ========"));
-  Serial.println(F("  sweep (sw)      - Clear pins from lane"));
-  Serial.println(F("  pindrop (pd)    - Drop pins from deck"));
-  Serial.println(F("  turretload (tl) - Load turret with 10 pins"));
+  Serial.println(F("  sweep (sw)        - Clear pins from lane"));
+  Serial.println(F("  pindrop (pd)      - Drop pins from deck"));
+  Serial.println(F("  turretload (tl)   - Load turret with 10 pins"));
+  Serial.println(F("  pinpickup (pp)    - Pick up pins from lane"));
+  Serial.println(F("  pinset (ps)       - Set held pins back on lane"));
+  Serial.println(F("  pincycle (pc)     - Cycle pickup/set repeatedly"));
   Serial.println(F(""));
-  Serial.println(F("  stop (x)        - Stop running sequence"));
-  Serial.println(F("  back (b)        - Return to main menu"));
+  Serial.println(F("  stop (x/<Enter>)  - Stop running sequence"));
+  Serial.println(F("  back (b)          - Return to main menu"));
   Serial.println(F("==============================="));
   Serial.println(F(""));
 }
@@ -2127,7 +2256,7 @@ void handleSequenceMenu(String cmd) {
       if (seqPrompt == SEQPROMPT_PD_PRECLEAR) {
         pinDropPreClear = true;
         seqPrompt = SEQPROMPT_PD_POSTCLEAR;
-        Serial.println(F("Clear pins after dropping? (y/n)"));
+        Serial.println(F("Clear pins after dropping? (Y/n)"));
       } else if (seqPrompt == SEQPROMPT_PD_POSTCLEAR) {
         pinDropPostClear = true;
         seqPrompt = SEQPROMPT_NONE;
@@ -2138,12 +2267,22 @@ void handleSequenceMenu(String cmd) {
       } else if (seqPrompt == SEQPROMPT_TL_RESUME) {
         seqPrompt = SEQPROMPT_NONE;
         startTurretLoad();
+      } else if (seqPrompt == SEQPROMPT_PP_READY) {
+        seqPrompt = SEQPROMPT_NONE;
+        startPinPickup();
+      } else if (seqPrompt == SEQPROMPT_PS_CONFIRM) {
+        seqPrompt = SEQPROMPT_NONE;
+        startPinSet();
+      } else if (seqPrompt == SEQPROMPT_PC_READY) {
+        seqPrompt = SEQPROMPT_NONE;
+        pinCycleActive = true;
+        startPinPickup();
       }
     } else if (cmd == "n" || cmd == "no") {
       if (seqPrompt == SEQPROMPT_PD_PRECLEAR) {
         pinDropPreClear = false;
         seqPrompt = SEQPROMPT_PD_POSTCLEAR;
-        Serial.println(F("Clear pins after dropping? (y/n)"));
+        Serial.println(F("Clear pins after dropping? (Y/n)"));
       } else if (seqPrompt == SEQPROMPT_PD_POSTCLEAR) {
         pinDropPostClear = false;
         seqPrompt = SEQPROMPT_NONE;
@@ -2156,6 +2295,15 @@ void handleSequenceMenu(String cmd) {
         turretPinsLoaded = 0;
         Serial.println(F(">> Pin count reset to 0. Turret load cancelled."));
         Serial.println(F(">> Clear the turret manually if needed, then try again."));
+      } else if (seqPrompt == SEQPROMPT_PP_READY) {
+        seqPrompt = SEQPROMPT_NONE;
+        Serial.println(F(">> Pin pickup cancelled"));
+      } else if (seqPrompt == SEQPROMPT_PS_CONFIRM) {
+        seqPrompt = SEQPROMPT_NONE;
+        Serial.println(F(">> Pin set cancelled"));
+      } else if (seqPrompt == SEQPROMPT_PC_READY) {
+        seqPrompt = SEQPROMPT_NONE;
+        Serial.println(F(">> Pin cycle cancelled"));
       }
     } else {
       Serial.println(F(">> Please enter 'y' or 'n'"));
@@ -2174,7 +2322,7 @@ void handleSequenceMenu(String cmd) {
   }
   else if (cmd == "pindrop" || cmd == "pd") {
     seqPrompt = SEQPROMPT_PD_PRECLEAR;
-    Serial.println(F("Clear lane before dropping? (y/n)"));
+    Serial.println(F("Clear lane before dropping? (Y/n)"));
   }
   else if (cmd == "turretload" || cmd == "tl") {
     if (turretPinsLoaded > 0) {
@@ -2183,13 +2331,39 @@ void handleSequenceMenu(String cmd) {
       Serial.print(F(" pins in turret (at slot "));
       Serial.print(turretPinsLoaded);
       Serial.println(F(")."));
-      Serial.println(F("Is this correct? Continue loading? (y/n)"));
+      Serial.println(F("Is this correct? Continue loading? (Y/n)"));
       seqPrompt = SEQPROMPT_TL_RESUME;
     } else {
       seqPrompt = SEQPROMPT_TL_CONFIRM;
       Serial.println(F("Verify turret is empty - no pins loaded."));
-      Serial.println(F("Ready to proceed? (y/n)"));
+      Serial.println(F("Ready to proceed? (Y/n)"));
     }
+  }
+  else if (cmd == "pinpickup" || cmd == "pp") {
+    if (pinPickupActive || pinSetActive || pinCycleActive || pinDropActive || turretLoadActive || sweepClearActive) {
+      Serial.println(F(">> A sequence is already running"));
+      return;
+    }
+    seqPrompt = SEQPROMPT_PP_READY;
+    Serial.println(F("Are there pins on the lane ready to pick up,"));
+    Serial.println(F("and no pins already in the scissors? (Y/n)"));
+  }
+  else if (cmd == "pinset" || cmd == "ps") {
+    if (pinPickupActive || pinSetActive || pinCycleActive || pinDropActive || turretLoadActive || sweepClearActive) {
+      Serial.println(F(">> A sequence is already running"));
+      return;
+    }
+    seqPrompt = SEQPROMPT_PS_CONFIRM;
+    Serial.println(F("Confirm no pins on the lane (scissors are holding pins)? (Y/n)"));
+  }
+  else if (cmd == "pincycle" || cmd == "pc") {
+    if (pinPickupActive || pinSetActive || pinCycleActive || pinDropActive || turretLoadActive || sweepClearActive) {
+      Serial.println(F(">> A sequence is already running"));
+      return;
+    }
+    seqPrompt = SEQPROMPT_PC_READY;
+    Serial.println(F("Are there pins on the lane ready to pick up,"));
+    Serial.println(F("and no pins already in the scissors? (Y/n)"));
   }
   else {
     Serial.print(F("Unknown: "));
@@ -2301,14 +2475,10 @@ void startPinDrop(bool preClear, bool postClear) {
     startSweepClear();
     pinDropPhase = PDROP_PRECLEAR_WAIT;
   } else {
-    Serial.println(F("   Phase: Scissor open (skipping pre-clear)"));
-    ensureScissorAttached();
-    ScissorsServo.write(SCISSOR_DROP_ANGLE);
-    scissorAngle = SCISSOR_DROP_ANGLE;
-    ensureRaiseAttached();
-    ensureSliderAttached();
-    pinDropPhaseStartMs = millis();
-    pinDropPhase = PDROP_SCISSOR_OPEN;
+    Serial.println(F("   Phase: Sweep to guard (no pre-clear)"));
+    ensureSweepAttached();
+    startSweepTo(SWEEP_GUARD_ANGLE, 180 - SWEEP_GUARD_ANGLE);
+    pinDropPhase = PDROP_SWEEP_GUARD;
   }
 }
 
@@ -2321,7 +2491,22 @@ void runPinDropFSM() {
 
     case PDROP_PRECLEAR_WAIT:
       if (!sweepClearActive) {
-        Serial.println(F("   Phase: Scissor open"));
+        ensureScissorAttached();
+        ScissorsServo.write(SCISSOR_DROP_ANGLE);
+        scissorAngle = SCISSOR_DROP_ANGLE;
+        ensureRaiseAttached();
+        ensureSliderAttached();
+        pinDropPhaseStartMs = now;
+        pinDropPhase = PDROP_SCISSOR_OPEN;
+      }
+      break;
+
+    case PDROP_SWEEP_GUARD:
+      pinDropPhase = PDROP_SWEEP_GUARD_WAIT;
+      break;
+
+    case PDROP_SWEEP_GUARD_WAIT:
+      if (!sweepAnimating) {
         ensureScissorAttached();
         ScissorsServo.write(SCISSOR_DROP_ANGLE);
         scissorAngle = SCISSOR_DROP_ANGLE;
@@ -2334,7 +2519,7 @@ void runPinDropFSM() {
 
     case PDROP_SCISSOR_OPEN:
       if (now - pinDropPhaseStartMs >= PDROP_SETTLE_MS) {
-        Serial.println(F("   Phase: Raise to down/set position"));
+        ensureRaiseAttached();
         LeftRaiseServo.write(RAISE_DOWN_ANGLE);
         RightRaiseServo.write(180 - RAISE_DOWN_ANGLE);
         raiseLeftPos = RAISE_DOWN_ANGLE;
@@ -2346,7 +2531,6 @@ void runPinDropFSM() {
 
     case PDROP_RAISE_DOWN:
       if (now - pinDropPhaseStartMs >= PDROP_RAISE_SETTLE_MS) {
-        Serial.println(F("   Phase: Sliding deck release"));
         SlideServo.write(SLIDER_RELEASE_ANGLE);
         sliderAngle = SLIDER_RELEASE_ANGLE;
         pinDropPhaseStartMs = now;
@@ -2356,7 +2540,6 @@ void runPinDropFSM() {
 
     case PDROP_SLIDER_RELEASE:
       if (now - pinDropPhaseStartMs >= PDROP_DROP_MS) {
-        Serial.println(F("   Phase: Raise up (slider still extended)"));
         LeftRaiseServo.write(RAISE_UP_ANGLE);
         RightRaiseServo.write(180 - RAISE_UP_ANGLE);
         raiseLeftPos = RAISE_UP_ANGLE;
@@ -2368,7 +2551,6 @@ void runPinDropFSM() {
 
     case PDROP_RAISE_UP:
       if (now - pinDropPhaseStartMs >= PDROP_RAISE_SETTLE_MS) {
-        Serial.println(F("   Phase: Sliding deck home"));
         SlideServo.write(SLIDER_HOME_ANGLE);
         sliderAngle = SLIDER_HOME_ANGLE;
         pinDropPhaseStartMs = now;
@@ -2379,6 +2561,7 @@ void runPinDropFSM() {
     case PDROP_SLIDER_HOME:
       if (now - pinDropPhaseStartMs >= PDROP_SETTLE_MS) {
         if (pinDropPostClear) {
+          Serial.println(F("   Starting post-clear..."));
           startSweepClear();
           pinDropPhase = PDROP_POSTCLEAR_WAIT;
         } else {
@@ -2430,23 +2613,43 @@ void startTurretLoad() {
   }
 
   turretLoadActive = true;
-  turretLoadPhase = TLOAD_HOMING;
   tlLoadedCount = turretPinsLoaded;
   tlNowCatching = (turretPinsLoaded < 9) ? turretPinsLoaded + 1 : 9;
   tlQueuedPins = 0;
 
   Serial.println(F(""));
+  // Raise deck to UP position early so it's ready to catch pins at release.
+  ensureRaiseAttached();
+  raiseLeftPos = RAISE_UP_ANGLE;
+  raiseRightPos = 180 - RAISE_UP_ANGLE;
+  LeftRaiseServo.write(raiseLeftPos);
+  RightRaiseServo.write(raiseRightPos);
+  Serial.println(F("   Deck raised to UP position"));
+  ConveyorOff();
+  conveyorIsOn = false;
+
+  // When pins are already in the turret (from a previous partial load), we must
+  // NOT re-home. Homing rotates the turret nearly a full revolution, which would
+  // jam or eject the pins already sitting in occupied slots. Instead, we skip
+  // homing and move directly to the next empty slot — the turret position is
+  // still valid from the homing that was done at the start of the previous load.
   if (turretPinsLoaded > 0) {
     Serial.print(F(">> Resuming turret load from "));
     Serial.print(turretPinsLoaded);
     Serial.println(F(" pins..."));
+    Serial.print(F("   Skipping home (pins in turret). Moving to slot "));
+    Serial.print(tlNowCatching);
+    Serial.println(F("..."));
+    stepper.setMaxSpeed(TURRET_NORMAL_MAXSPEED);
+    stepper.setAcceleration(TURRET_NORMAL_ACCEL);
+    turretGoTo(PinPositions[tlNowCatching]);
+    turretLoadPhase = TLOAD_MOVE_TO_SLOT1;
   } else {
     Serial.println(F(">> Starting turret load sequence..."));
+    Serial.println(F("   Phase: Homing turret"));
+    startTurretHome();
+    turretLoadPhase = TLOAD_HOMING;
   }
-  Serial.println(F("   Phase: Homing turret"));
-  ConveyorOff();
-  conveyorIsOn = false;
-  startTurretHome();
 }
 
 void runTurretLoadFSM() {
@@ -2494,7 +2697,7 @@ void runTurretLoadFSM() {
         tlIrLastRaw = digitalRead(IR_SENSOR_PIN);
         tlIrStable = tlIrLastRaw;
         tlIrLastChange = now;
-        tlPinArmed = true;  // Always arm - if pin already blocking, detect immediately
+        tlQueuedPins = 0;
         // Start conveyor
         ConveyorOn();
         conveyorIsOn = true;
@@ -2502,9 +2705,29 @@ void runTurretLoadFSM() {
         if (tlLoadedCount >= 9) {
           // Already have 9 pins, just need the 10th
           Serial.println(F("   9 pins already loaded. Waiting for 10th pin..."));
-          tlQueuedPins = 0;
+          tlPinArmed = true;
           turretLoadPhase = TLOAD_WAIT_TENTH;
+        } else if (tlIrLastRaw == LOW) {
+          // A pin is already at the IR sensor before loading starts. Count it
+          // for the current slot and go straight to CATCH_DELAY so it has time
+          // to settle into the turret. Keep the sensor disarmed during this
+          // delay so the pin clearing + a new conveyor pin arriving doesn't
+          // create a queued detection that shifts all subsequent slot timing.
+          // The sensor re-arms naturally when CATCH_DELAY ends and the turret
+          // advances to the next slot.
+          tlPinArmed = false;
+          tlLoadedCount++;
+          turretPinsLoaded = tlLoadedCount;
+          Serial.print(F("   Pin already at sensor - caught for slot "));
+          Serial.print(tlNowCatching);
+          Serial.print(F("! ("));
+          Serial.print(tlLoadedCount);
+          Serial.println(F("/9)"));
+          tlPhaseStartMs = now;
+          turretLoadPhase = TLOAD_CATCH_DELAY;
         } else {
+          // Sensor clear — arm and wait for first pin
+          tlPinArmed = true;
           Serial.print(F("   Waiting for pin at slot "));
           Serial.println(tlNowCatching);
           turretLoadPhase = TLOAD_WAIT_CATCH;
@@ -2563,26 +2786,38 @@ void runTurretLoadFSM() {
     case TLOAD_WAIT_TENTH:
       if (tlQueuedPins > 0) {
         tlQueuedPins--;
-        Serial.println(F("   10th pin detected! Preparing deck for release..."));
-        // Ensure sliding deck is at home/catch so pins fall in properly
+        Serial.println(F("   10th pin detected!"));
+        // Prepare deck while turret is moving
         ensureSliderAttached();
         SlideServo.write(SLIDER_HOME_ANGLE);
         sliderAngle = SLIDER_HOME_ANGLE;
-        // Ensure scissor is in grab position to hold pins on deck
         ensureScissorAttached();
         ScissorsServo.write(SCISSOR_GRAB_ANGLE);
         scissorAngle = SCISSOR_GRAB_ANGLE;
-        Serial.println(F("   Sliding deck home, scissor grab. Moving to release..."));
+        Serial.println(F("   Sliding deck home, scissor grab."));
+        // Start turret moving to release position
+        Serial.println(F("   Moving turret to release position..."));
         long releasePos = PinPositions[10] + TURRET_PIN10_RELEASE_OFFSET;
         stepper.setMaxSpeed(TURRET_SPRING_MAXSPEED);
         stepper.setAcceleration(TURRET_SPRING_ACCEL);
         turretGoTo(releasePos);
-        turretLoadPhase = TLOAD_MOVE_RELEASE;
+        // Start conveyor shutoff timer
+        tlPhaseStartMs = now;
+        tlConveyorStopped = false;
+        turretLoadPhase = TLOAD_TENTH_SETTLE;
       }
       break;
 
-    case TLOAD_MOVE_RELEASE:
-      if (!turretMoving) {
+    case TLOAD_TENTH_SETTLE:
+      // Stop conveyor after settle delay (pin has dropped)
+      if (!tlConveyorStopped && (now - tlPhaseStartMs >= CATCH_DELAY_MS)) {
+        Serial.println(F("   Stopping conveyor..."));
+        ConveyorOff();
+        conveyorIsOn = false;
+        tlConveyorStopped = true;
+      }
+      // Wait for turret to finish moving to release
+      if (tlConveyorStopped && !turretMoving) {
         Serial.println(F("   At release position - dwelling..."));
         tlPhaseStartMs = now;
         turretLoadPhase = TLOAD_RELEASE_DWELL;
@@ -2595,15 +2830,16 @@ void runTurretLoadFSM() {
         Serial.println(F("   Release complete. Re-homing turret..."));
         ConveyorOff();
         conveyorIsOn = false;
-        stepper.setMaxSpeed(TURRET_NORMAL_MAXSPEED);
-        stepper.setAcceleration(TURRET_NORMAL_ACCEL);
-        startTurretHome();
-        turretLoadPhase = TLOAD_POST_HOMING;
+        // Pass minSteps=100 so homing ignores the nearby magnet and finds it
+        // after a full revolution (turret is right at the magnet after release)
+        startTurretHome(100);
+        turretLoadPhase = TLOAD_MOVE_SLOT1;
       }
       break;
 
-    case TLOAD_POST_HOMING:
-      if (!homingActive) {
+    case TLOAD_MOVE_SLOT1:
+      if (!homingActive && !turretMoving) {
+        Serial.println(F("   Turret at slot 1."));
         turretLoadPhase = TLOAD_DONE;
       }
       break;
@@ -2614,6 +2850,172 @@ void runTurretLoadFSM() {
       Serial.println(F(">> Turret load sequence COMPLETE"));
       Serial.println(F("   10 pins loaded and released to deck"));
       Serial.println(F(""));
+      break;
+
+    default:
+      break;
+  }
+}
+
+// =====================================================
+// PIN PICKUP SEQUENCE
+// =====================================================
+
+void startPinPickup() {
+  if (pinPickupActive || pinSetActive) {
+    Serial.println(F(">> Pickup/set already running"));
+    return;
+  }
+  if (pinDropActive || turretLoadActive || sweepClearActive) {
+    Serial.println(F(">> ERROR: Another sequence is running"));
+    return;
+  }
+  pinPickupActive = true;
+  Serial.println(F(""));
+  Serial.println(F(">> Starting pin pickup sequence..."));
+  Serial.println(F("   Phase: Scissor open"));
+  ensureScissorAttached();
+  ensureRaiseAttached();
+  ScissorsServo.write(SCISSOR_DROP_ANGLE);
+  scissorAngle = SCISSOR_DROP_ANGLE;
+  pinPickupPhaseStartMs = millis();
+  pinPickupPhase = PPU_SCISSOR_OPEN;
+}
+
+void runPinPickupFSM() {
+  if (!pinPickupActive) return;
+
+  unsigned long now = millis();
+
+  switch (pinPickupPhase) {
+
+    case PPU_SCISSOR_OPEN:
+      if (now - pinPickupPhaseStartMs >= PDROP_SETTLE_MS) {
+        Serial.println(F("   Phase: Raise to grab position"));
+        LeftRaiseServo.write(RAISE_GRAB_ANGLE);
+        RightRaiseServo.write(180 - RAISE_GRAB_ANGLE);
+        raiseLeftPos = RAISE_GRAB_ANGLE;
+        raiseRightPos = 180 - RAISE_GRAB_ANGLE;
+        pinPickupPhaseStartMs = now;
+        pinPickupPhase = PPU_RAISE_GRAB;
+      }
+      break;
+
+    case PPU_RAISE_GRAB:
+      if (now - pinPickupPhaseStartMs >= PDROP_RAISE_SETTLE_MS) {
+        Serial.println(F("   Phase: Scissor close (grab)"));
+        ScissorsServo.write(SCISSOR_GRAB_ANGLE);
+        scissorAngle = SCISSOR_GRAB_ANGLE;
+        pinPickupPhaseStartMs = now;
+        pinPickupPhase = PPU_SCISSOR_CLOSE;
+      }
+      break;
+
+    case PPU_SCISSOR_CLOSE:
+      if (now - pinPickupPhaseStartMs >= PDROP_SETTLE_MS) {
+        Serial.println(F("   Phase: Raise up"));
+        LeftRaiseServo.write(RAISE_UP_ANGLE);
+        RightRaiseServo.write(180 - RAISE_UP_ANGLE);
+        raiseLeftPos = RAISE_UP_ANGLE;
+        raiseRightPos = 180 - RAISE_UP_ANGLE;
+        pinPickupPhaseStartMs = now;
+        pinPickupPhase = PPU_RAISE_UP;
+      }
+      break;
+
+    case PPU_RAISE_UP:
+      if (now - pinPickupPhaseStartMs >= PDROP_RAISE_SETTLE_MS) {
+        pinPickupPhase = PPU_DONE;
+      }
+      break;
+
+    case PPU_DONE:
+      pinPickupActive = false;
+      pinPickupPhase = PPU_IDLE;
+      Serial.println(F(">> Pin pickup sequence COMPLETE"));
+      Serial.println(F(""));
+      if (pinCycleActive) {
+        Serial.println(F(">> Cycling: starting pin set... (Enter or x to stop)"));
+        startPinSet();
+      }
+      break;
+
+    default:
+      break;
+  }
+}
+
+// =====================================================
+// PIN SET SEQUENCE
+// =====================================================
+
+void startPinSet() {
+  if (pinPickupActive || pinSetActive) {
+    Serial.println(F(">> Pickup/set already running"));
+    return;
+  }
+  if (pinDropActive || turretLoadActive || sweepClearActive) {
+    Serial.println(F(">> ERROR: Another sequence is running"));
+    return;
+  }
+  pinSetActive = true;
+  Serial.println(F(""));
+  Serial.println(F(">> Starting pin set sequence..."));
+  Serial.println(F("   Phase: Raise to drop position"));
+  ensureScissorAttached();
+  ensureRaiseAttached();
+  LeftRaiseServo.write(RAISE_DROP_ANGLE);
+  RightRaiseServo.write(180 - RAISE_DROP_ANGLE);
+  raiseLeftPos = RAISE_DROP_ANGLE;
+  raiseRightPos = 180 - RAISE_DROP_ANGLE;
+  pinSetPhaseStartMs = millis();
+  pinSetPhase = PSET_RAISE_DROP;
+}
+
+void runPinSetFSM() {
+  if (!pinSetActive) return;
+
+  unsigned long now = millis();
+
+  switch (pinSetPhase) {
+
+    case PSET_RAISE_DROP:
+      if (now - pinSetPhaseStartMs >= PDROP_RAISE_SETTLE_MS) {
+        Serial.println(F("   Phase: Scissor open (release pins)"));
+        ScissorsServo.write(SCISSOR_DROP_ANGLE);
+        scissorAngle = SCISSOR_DROP_ANGLE;
+        pinSetPhaseStartMs = now;
+        pinSetPhase = PSET_SCISSOR_OPEN;
+      }
+      break;
+
+    case PSET_SCISSOR_OPEN:
+      if (now - pinSetPhaseStartMs >= PDROP_SETTLE_MS) {
+        Serial.println(F("   Phase: Raise up"));
+        LeftRaiseServo.write(RAISE_UP_ANGLE);
+        RightRaiseServo.write(180 - RAISE_UP_ANGLE);
+        raiseLeftPos = RAISE_UP_ANGLE;
+        raiseRightPos = 180 - RAISE_UP_ANGLE;
+        pinSetPhaseStartMs = now;
+        pinSetPhase = PSET_RAISE_UP;
+      }
+      break;
+
+    case PSET_RAISE_UP:
+      if (now - pinSetPhaseStartMs >= PDROP_RAISE_SETTLE_MS) {
+        pinSetPhase = PSET_DONE;
+      }
+      break;
+
+    case PSET_DONE:
+      pinSetActive = false;
+      pinSetPhase = PSET_IDLE;
+      Serial.println(F(">> Pin set sequence COMPLETE"));
+      Serial.println(F(""));
+      if (pinCycleActive) {
+        Serial.println(F(">> Cycling: starting pin pickup... (Enter or x to stop)"));
+        startPinPickup();
+      }
       break;
 
     default:
