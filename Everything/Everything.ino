@@ -22,20 +22,20 @@
 #include <Servo.h>
 #include <AccelStepper.h>
 #if __has_include("pin_config.user.h")
-  #include "pin_config.h"
   #include "pin_config.user.h"
+  #include "pin_config.h"
 #else
   #include "pin_config.h"
 #endif
 #if __has_include("general_config.user.h")
-  #include "general_config.h"
   #include "general_config.user.h"
+  #include "general_config.h"
 #else
   #include "general_config.h"
 #endif
 
 // Current version, will be used by Scoremore to determine supported features
-#define VERSION "1.2.2"
+#define VERSION "1.2.3"
 
 Adafruit_NeoPixel deckL(DECK_LED_LENGTH_L, DECK_PIN_L, NEO_GRB + NEO_KHZ800);
 Adafruit_NeoPixel deckR(DECK_LED_LENGTH_R, DECK_PIN_R, NEO_GRB + NEO_KHZ800);
@@ -261,6 +261,24 @@ unsigned long conesFullHoldStartMs=0;
 bool postSetResumeDelayActive = false;
 unsigned long postSetResumeStart = 0;
 
+// ---- PAUSE FOR SCOREMORE IF SCOREMORE_USER = 1 ----
+bool waitForScoreMore(){
+  unsigned long start = millis();
+
+  Serial.println("WAITING_FOR_SCOREMORE");
+
+  while (true) {
+    if (Serial && Serial.available() > 0) {
+      Serial.println("SCOREMORE_CONNECTED");
+      return true;
+    }
+
+    // LED's only - no motion from servo's
+    laneUpdate();
+    delay(5);
+  }
+}
+
 // ======================= SETUP =======================
 void setup(){
   ledsBegin();
@@ -271,7 +289,16 @@ void setup(){
   digitalWrite(FRAME_LED1_PIN, LOW);
   digitalWrite(FRAME_LED2_PIN, HIGH);  //indicate to the user that we're in setup
 
-  Serial.begin(SCOREMORE_BAUD); delay(1000); Serial.println("READY");
+// =========== WAIT FOR SCOREMORE =================  
+  Serial.begin(SCOREMORE_BAUD); delay(1000);
+
+  #if SCOREMORE_USER == 1
+    waitForScoreMore();   // Blocks BEFORE any servo attaches
+  #endif
+
+  Serial.println("READY");
+
+
   digitalWrite(FRAME_LED2_PIN, LOW);
 
   pinMode(BALL_SENSOR_PIN, INPUT_PULLUP);
