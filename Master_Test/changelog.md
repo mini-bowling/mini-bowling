@@ -2,10 +2,11 @@
 
 All notable changes to the Master Test Script will be documented in this file.
 
-## [v1.2.3] - 2026-02-21
+## [v1.2.3] - 2026-02-23
 
 ### Added
 - `SCOREMORE_USER` config setting to enable/disable waiting to connect to Scoremore for initialization. Default is `0` (off) — set to `1` to wait for Scoremore to connect. (thanks to Wahapainan)
+- Added project README.md file
 
 ### Fixed
 - Config redefinition warnings: every `#define` in `general_config.h`, `pin_config.h`, and `.user.h` files is now wrapped in `#ifndef`/`#endif` guards
