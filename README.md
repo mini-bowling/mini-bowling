@@ -4,6 +4,10 @@ Firmware for the Danny Lum designed and built mini bowling pinsetter controlled 
 pinsetter automatically sets pins onto the lane, clears fallen pins after each throw, and communicates with the
 Scoremore scoring system.
 
+## Contributing
+
+New to Git? See the [Git Beginner's Guide](docs/git-guide.md) for instructions on setting up, branching, committing, and opening pull requests.
+
 ## Arduino Sketches
 
 ### `Everything/` — Production Firmware
