@@ -22,20 +22,20 @@
 #include <Servo.h>
 #include <AccelStepper.h>
 #if __has_include("pin_config.user.h")
-  #include "pin_config.h"
   #include "pin_config.user.h"
+  #include "pin_config.h"
 #else
   #include "pin_config.h"
 #endif
 #if __has_include("general_config.user.h")
-  #include "general_config.h"
   #include "general_config.user.h"
+  #include "general_config.h"
 #else
   #include "general_config.h"
 #endif
 
 // Current version, will be used by Scoremore to determine supported features
-#define VERSION "1.2.2"
+#define VERSION "1.2.3"
 
 Adafruit_NeoPixel deckL(DECK_LED_LENGTH_L, DECK_PIN_L, NEO_GRB + NEO_KHZ800);
 Adafruit_NeoPixel deckR(DECK_LED_LENGTH_R, DECK_PIN_R, NEO_GRB + NEO_KHZ800);

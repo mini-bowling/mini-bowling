@@ -1,5 +1,11 @@
 # Everything Script - Changelog
 
+## Version 1.2.3 - 2026-02-21
+
+### Fixed
+- Config redefinition warnings: every `#define` in `general_config.h`, `pin_config.h`, and `.user.h` files is now wrapped in `#ifndef`/`#endif` guards
+- Include order corrected so the user file is included first and the default file second; user values now take priority without requiring redefinition
+
 ## Version 1.2.2 - 2026-02-21
 
 ### Changed

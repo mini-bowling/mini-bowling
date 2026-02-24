@@ -1,5 +1,5 @@
 // =====================================================
-// MASTER TEST SCRIPT v1.2.2 - Pinsetter Component Tester
+// MASTER TEST SCRIPT v1.2.3 - Pinsetter Component Tester
 // Consolidated test script for all pinsetter components
 //
 // Type 'help' for main menu, 'back' to return from sub-menus
@@ -12,15 +12,15 @@
 
 // Configuration files
 #if __has_include("pin_config.user.h")
-  #include "pin_config.h"
   #include "pin_config.user.h"
+  #include "pin_config.h"
 #else
   #include "pin_config.h"
 #endif
 
 #if __has_include("general_config.user.h")
-  #include "general_config.h"
   #include "general_config.user.h"
+  #include "general_config.h"
 #else
   #include "general_config.h"
 #endif
@@ -385,7 +385,7 @@ void setup() {
 
   Serial.println(F(""));
   Serial.println(F("========================================"));
-  Serial.println(F("   MASTER TEST SCRIPT v1.2.2"));
+  Serial.println(F("   MASTER TEST SCRIPT v1.2.3"));
   Serial.println(F("   Pinsetter Component Tester"));
   Serial.println(F("========================================"));
   Serial.println(F(""));
