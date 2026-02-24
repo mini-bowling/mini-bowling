@@ -5,11 +5,15 @@
 // =====================================================
 
 // =====================================================
-// SCOREMORE SERIAL BAUD RATE
+// SCOREMORE SERIAL BAUD RATE & CONFIG
 // =====================================================
 #ifndef SCOREMORE_BAUD
 #define SCOREMORE_BAUD      9600  // DEFAULT: 9600
 #endif
+#ifndef SCOREMORE_USER
+#define SCOREMORE_USER      0     // DEFAULT: 0, do not wait for Scoremore connect. Set to 1 to wait for Scoremore before intialization.
+#endif
+
 
 // =====================================================
 // LED STRIP LENGTHS

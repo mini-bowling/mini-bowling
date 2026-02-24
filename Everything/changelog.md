@@ -2,6 +2,9 @@
 
 ## Version 1.2.3 - 2026-02-21
 
+### Added
+- `SCOREMORE_USER` config setting to enable/disable waiting to connect to Scoremore for initialization. Default is `0` (off) — set to `1` to wait for Scoremore to connect. (thanks to Wahapainan)
+
 ### Fixed
 - Config redefinition warnings: every `#define` in `general_config.h`, `pin_config.h`, and `.user.h` files is now wrapped in `#ifndef`/`#endif` guards
 - Include order corrected so the user file is included first and the default file second; user values now take priority without requiring redefinition
