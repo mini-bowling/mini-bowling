@@ -38,7 +38,7 @@ will occur.
 ## Configuration
 
 The Everything and Master_Test sketches use two configuration headers. Note that these files are identical to each other
-between the Everything and Master_Test skatches/programs.
+between the Everything and Master_Test sketches/programs.
 
 | File               | Purpose                                                          |
 |--------------------|------------------------------------------------------------------|
