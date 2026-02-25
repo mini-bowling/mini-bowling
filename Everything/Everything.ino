@@ -148,6 +148,15 @@ bool strikeLightOn=false, strikeEdgeLatched=false, strikeDetected=false;
 
 // Reset button
 bool pinsetterResetRequested=false;
+unsigned long resetBtnPressTime = 0;
+bool resetBtnPressed = false;
+bool resetBtnHandled = false;
+bool maintenanceMode = false;
+
+// Pre-declare lane reset button functions
+void triggerLaneReset();
+void enterMaintenanceMode();
+void exitMaintenanceModeAndRestart();
 
 // ===== Fill-ball (ScoreMore logical pin 7) =====
 bool autoResetFillBall = false;
@@ -306,6 +315,10 @@ void setup(){
 
   stepper1.setMaxSpeed(TURRET_NORMAL_MAXSPEED);
   stepper1.setAcceleration(TURRET_NORMAL_ACCEL);
+  stepper1.setEnablePin(STEPPER_ENABLE_PIN);
+  // true = invert the enable pin (standard for stepsticks where LOW = on, HIGH = off)
+  stepper1.setPinsInverted(false, false, true); 
+  stepper1.enableOutputs();
 
   LeftRaiseServo.attach(RAISE_LEFT_PIN);
   RightRaiseServo.attach(RAISE_RIGHT_PIN);
@@ -445,16 +458,49 @@ void loop(){
   if(!ballRearmed && (millis()-lastBallHighMs>=BALL_REARM_MS) && rawBall==HIGH){ ballRearmed=true; }
   ballPrev=rawBall;
 
-  if(stepIndex>0){
-     runSequence();
-  } else {
-    if(pinsetterResetRequested) {  //if the reset button has been pressed and no other sequences are queued
-      stepIndex=22;       //trigger reset of the lane
-      pinsetterResetRequested=false;
+  // ======================= RESET BUTTON LOGIC =======================
+    int btnState = digitalRead(PINSETTER_RESET_PIN);
+    
+    // Button just pressed
+    if (btnState == LOW && !resetBtnPressed) {
+      resetBtnPressed = true;
+      resetBtnPressTime = millis();
+      resetBtnHandled = false;
+    } 
+    // Button is being held down
+    else if (btnState == LOW && resetBtnPressed) {
+      if (!resetBtnHandled && (millis() - resetBtnPressTime >= 1500)) {
+        resetBtnHandled = true; // Long press triggered
+        if (!maintenanceMode) {
+          enterMaintenanceMode();
+        }
+      }
+    } 
+    // Button released
+    else if (btnState == HIGH && resetBtnPressed) {
+      resetBtnPressed = false;
+      // Quick press (with a 50ms debounce buffer)
+      if (!resetBtnHandled && (millis() - resetBtnPressTime > 50)) {
+        if (maintenanceMode) {
+          exitMaintenanceModeAndRestart();
+        } else if (pauseMode) {
+          exitPauseMode();
+        } else {
+          triggerLaneReset();
+        }
+      }
     }
-  }
-}
 
+    // Handle standard sequences or serial-requested resets
+    if(stepIndex > 0){
+      runSequence();
+    } else {
+      if(pinsetterResetRequested) {  // If triggered via Scoremore Serial
+        triggerLaneReset();
+        pinsetterResetRequested=false;
+      }
+    }
+}
 // ======================= SEQUENCER =======================
 void runSequence(){
   unsigned long now=millis();
@@ -683,6 +729,7 @@ void PrimeFullRackAndSetLaneOnce(){
 
 // ======================= TURRET FSM =======================
 void runTurret(){
+  if (maintenanceMode){ return; } // Disable all stepper/turret logic during maintenance
   // Background refill priority
   if(backgroundRefillRequested){
     if(loadedCount<9){
@@ -916,6 +963,8 @@ void runHomingFSM(){
 void startTurretReleaseCycle(){ dropCycleJustFinished=false; turretReleaseRequested=true; }
 
 void updateConveyorOutput(){
+  if (maintenanceMode) { ConveyorOff(); return; } // Force conveyor off during maintenance
+
   if(postSetResumeDelayActive){
     if(millis() - postSetResumeStart < RESUME_AFTER_DECKUP_MS){
       ConveyorOff();
@@ -1510,4 +1559,107 @@ void exitPauseMode(){
   // Resume: sweep back up + white lights
   SweepUp();
   setAllLightsWhite();
+}
+
+// ======================= MAINTENANCE & RESET PROFILES =======================
+
+void triggerLaneReset() {
+  // 1. Let Scoremore know we're resetting the lane via the physical button
+  Serial.print("INPUT_CHANGE:"); Serial.print(SM_PINSETTER_RESET); Serial.println(":1");
+  delay(50); // Give the serial buffer a tiny gap
+  Serial.print("INPUT_CHANGE:"); Serial.print(SM_PINSETTER_RESET); Serial.println(":0");
+
+  // 2. Physically clear the frame similar to bowling a strike
+  scoreWindowActive = false;
+  ScissorsDrop();
+  StrikeSweepClearLane(); 
+  
+  // Clear any pending strike flags so we don't trigger light shows
+  strikePending = false; 
+  strikeDetected = false; 
+  strikeEdgeLatched = false; 
+  strikeLightOn = false;
+  
+  // 3. Send sequencer to step 30 (drops new pins and resets throw count)
+  stepIndex = 30; 
+  prevStepMillis = millis();
+}
+
+void enterMaintenanceMode() {
+  maintenanceMode = true;
+  
+  ConveyorOff();
+  stepper1.stop(); // Instantly halt stepper calculations
+  moving = false;
+
+  ScissorsDrop(); pumpAll(200); // Just drop any pins
+  SweepBack(); waitSweepDone(); // Quickly Push any deadwood to the back
+  SweepGuard(); waitSweepDone(2000); // Bring sweep to guard postion
+
+  // Move the deck so that trapped pins can be cleared
+  // Better to detach the deck lifts here, but not working for reasons  
+  // LeftRaiseServo.detach();
+  // RightRaiseServo.detach();
+  DeckPinDrop(); // Instead drops deck to scissor height
+  // Detach the slide servo so that trapped pins can be cleared
+  SlideServo.detach(); // Kill power to slide servo
+  // Disable the stepper so that pins can be cleared and set screws retightened.
+  stepper1.disableOutputs(); // Unlock Turret
+}
+
+void exitMaintenanceModeAndRestart() {
+  maintenanceMode = false;
+  SlideServo.attach(SLIDE_PIN); 
+  // LeftRaiseServo.attach(RAISE_LEFT_PIN);
+  // RightRaiseServo.attach(RAISE_RIGHT_PIN);
+  stepper1.enableOutputs(); 
+
+  // FULL STATE SCRUB
+  deckConeCount = 0;
+  deckHasTenReady = false;
+  conesFullHold = false;
+  conesFullHoldArmed = false;
+  backgroundRefillRequested = false;
+  releaseDwellActive = false;
+  turretReleaseRequested = false;
+  queuedPinEvents = 0;
+  dropCycleJustFinished = false;
+
+  // SCRUB LEFTOVER CONVEYOR REQUESTS
+  turretFillTo9Requested = false; 
+  forceConveyorForBallReturn = false;
+
+  // Master kill-switch for the conveyor. This forces the belt OFF during the 
+  // PowerOnSequence purge and the startHomeTurret sequence. It automatically 
+  // sets itself to 'false' inside runHomingFSM() when the turret is zeroed.
+  suspendConveyorUntilHomeDone = true; 
+
+  irStableState = digitalRead(IR_SENSOR_PIN);
+  pinEdgeArmed = (irStableState == HIGH);
+  
+  PowerOnSequence();
+  
+  lastPinCatchMs = millis(); 
+  emptyTurretReturnActive = false; 
+  
+  startHomeTurret();
+  while(homingActive){
+    runTurret(); updateConveyorOutput(); updateBallReturnDoor(); updateSweepTween(); laneUpdate(); delay(1);
+  }
+  // Conveyor free to start.
+  
+  NowCatching=1; goTo(PinPositions[1]); loadedCount=0;
+  turretFillTo9Requested=true;
+  
+  PrimeFullRackAndSetLaneOnce();
+  
+  if (maintenanceMode) return; 
+  
+  SweepUp(); waitSweepDone(); pumpAll(500);
+  startupWipeWhiteQuick(); lightsShownAfterBoot=true;
+  
+  waitingForBall=true; throwCount=1; stepIndex=0;
+  prevStepMillis=millis(); prevScoreMillis=millis();
+  lastBallActivityMs = millis(); 
+  updateFrameLEDs();
 }
