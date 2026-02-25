@@ -1,0 +1,116 @@
+Arduino Mega 2560 Timer Usage Analysis - Everything.ino
+========================================================
+Date: 2026-02-19
+
+OVERVIEW
+--------
+The Mega 2560 has six hardware timers. This document summarises how they are
+currently used by Everything.ino, identifies inefficiencies, and notes
+opportunities for improvement.
+
+
+MEGA 2560 TIMER MAP
+-------------------
+Timer   Size    HW PWM Pins     Current Usage
+------  ------  --------------  -----------------------------------------
+Timer0  8-bit   4, 13           Arduino core (millis, micros, delay)
+Timer1  16-bit  11, 12          IDLE
+Timer2  8-bit   9, 10           IDLE
+Timer3  16-bit  2, 3, 5         IDLE
+Timer4  16-bit  6, 7, 8         IDLE
+Timer5  16-bit  44, 45, 46      Servo library (all 7 servos)
+
+The Servo library on the Mega allocates timers in the order:
+Timer5 -> Timer1 -> Timer3 -> Timer4.
+With only 7 servos attached (well under the 12-per-timer limit), all 7 land
+on Timer5 alone. Timer1, Timer3, and Timer4 are completely unclaimed.
+
+
+ISSUE 1: AccelStepper Runs in Software (High Impact)
+-----------------------------------------------------
+AccelStepper generates step pulses entirely in software by calling
+stepper1.run() from the main loop. It uses no hardware timer. The effective
+step rate is therefore capped by how frequently loop() completes and reaches
+that call.
+
+Every task in the loop -- LED animation, conveyor logic, IR debounce,
+sequencer, ball trigger handling -- reduces how often stepper1.run() is
+called per second. This is the primary reason the turret homes and moves more
+slowly in Everything.ino than in autobowl_pinsetter.ino: the latter has a
+much lighter loop, so run() is called far more frequently.
+
+Notably, STEP_PIN (pin 2) and DIR_PIN (pin 3) are the output compare pins
+for Timer3 (OC3B and OC3C). Timer3 is completely idle and is physically
+wired to the exact pins driving the stepper driver. A hardware-timer-based
+library such as FastAccelStepper uses Timer1 or Timer3 to fire a hardware
+ISR that generates step pulses at a precise, fixed rate independent of loop
+overhead. This is the highest-value improvement available.
+
+
+ISSUE 2: NeoPixel show() Disables Interrupts (Medium Impact)
+-------------------------------------------------------------
+Adafruit_NeoPixel::show() disables global interrupts for the entire duration
+of bit-banging LED data at 800 KHz (~1.25 us per bit, 24 bits per LED):
+
+Strip       LEDs    Blocking time per show()
+----------  ------  ------------------------
+Lane L      41      ~1.23 ms
+Lane R      41      ~1.23 ms
+Deck L      11      ~0.33 ms
+Deck R      11      ~0.33 ms
+
+laneShowOnly() (called during ball comet and strike animations) blocks
+interrupts for ~2.5 ms. ledsShowAll() blocks them for ~3.1 ms.
+
+During those windows:
+  - The Servo timer ISR (Timer5) cannot fire -> servo PWM signals are
+    stretched or skipped -> visible servo jitter on rapid animations.
+  - stepper1.run() cannot be called -> gaps in the step pulse train,
+    reducing effective stepper throughput.
+  - Timer0 cannot fire -> millis() accumulates a small drift.
+
+The ball comet animation triggers laneShowOnly() every ~15 ms, blocking
+interrupts for ~2.5 ms per frame -- roughly 17% of the time during that
+animation. This compounds the AccelStepper issue above.
+
+
+LOOP TIMING DEBUG
+-----------------
+Loop timing instrumentation has been added to both Everything.ino and
+autobowl_pinsetter.ino (guarded by #define DEBUG_LOOP_TIMING). When enabled,
+each firmware prints a summary line every 5 seconds over Serial:
+
+  DEBUG:LOOP_US max=XXXX min=XX avg=XX n=XXXXXX
+
+Fields:
+  max  -- worst-case single loop iteration in microseconds. Spikes here are
+          usually caused by a NeoPixel show() call.
+  min  -- best-case iteration (loop with no work to do).
+  avg  -- mean iteration time. Dividing 1,000,000 by avg gives approximate
+          loop calls per second, which is the effective stepper poll rate.
+  n    -- total loop iterations in the 5-second window.
+
+To disable, comment out #define DEBUG_LOOP_TIMING near the top of either file.
+
+
+SUMMARY TABLE
+-------------
+Resource            Status          Impact
+------------------  --------------  ----------------------------------------
+Timer0              Arduino core    Fine
+Timer1              IDLE            Could drive a stepper ISR
+Timer2              IDLE            Available for general use
+Timer3              IDLE            Pins 2 & 3 are OC3B/OC3C (stepper pins)
+Timer4              IDLE            Available for general use
+Timer5              Servo (7/12)    Fine, 5 slots still available
+AccelStepper        Software poll   Step rate limited by loop overhead
+NeoPixel show()     IRQ-disabled    Servo jitter + stepper step gaps
+
+
+RECOMMENDED NEXT STEP
+---------------------
+Replace AccelStepper with FastAccelStepper. It is largely API-compatible and
+uses Timer1 or Timer3 on AVR to generate step pulses via hardware ISR,
+decoupling turret motion from loop frequency entirely. Given that Timer3 is
+idle and its output compare pins are already the STEP and DIR pins, the
+hardware is optimally positioned for this change with no rewiring required.

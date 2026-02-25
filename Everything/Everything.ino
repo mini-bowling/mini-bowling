@@ -37,6 +37,12 @@
 // Current version, will be used by Scoremore to determine supported features
 #define VERSION "1.2.3"
 
+// ======================= LOOP TIMING DEBUG =======================
+#define DEBUG_LOOP_TIMING  // Comment out to disable
+#ifdef DEBUG_LOOP_TIMING
+unsigned long _loopMax=0, _loopMin=ULONG_MAX, _loopSum=0, _loopCount=0, _loopReportMs=0;
+#endif
+
 Adafruit_NeoPixel deckL(DECK_LED_LENGTH_L, DECK_PIN_L, NEO_GRB + NEO_KHZ800);
 Adafruit_NeoPixel deckR(DECK_LED_LENGTH_R, DECK_PIN_R, NEO_GRB + NEO_KHZ800);
 Adafruit_NeoPixel laneL(LANE_LED_LENGTH_L, LANE_PIN_L, NEO_GRB + NEO_KHZ800);
@@ -376,6 +382,9 @@ void setup(){
 
 // ======================= LOOP =======================
 void loop(){
+#ifdef DEBUG_LOOP_TIMING
+  unsigned long _loopStart=micros();
+#endif
   unsigned long now=millis();
 
   updateSweepTween();
@@ -453,6 +462,21 @@ void loop(){
       pinsetterResetRequested=false;
     }
   }
+
+#ifdef DEBUG_LOOP_TIMING
+  unsigned long _loopTime=micros()-_loopStart;
+  if(_loopTime>_loopMax) _loopMax=_loopTime;
+  if(_loopTime<_loopMin) _loopMin=_loopTime;
+  _loopSum+=_loopTime; _loopCount++;
+  if(millis()-_loopReportMs>=5000){
+    _loopReportMs=millis();
+    Serial.print("DEBUG:LOOP_US max="); Serial.print(_loopMax);
+    Serial.print(" min="); Serial.print(_loopMin);
+    Serial.print(" avg="); Serial.print(_loopCount?_loopSum/_loopCount:0);
+    Serial.print(" n="); Serial.println(_loopCount);
+    _loopMax=0; _loopMin=ULONG_MAX; _loopSum=0; _loopCount=0;
+  }
+#endif
 }
 
 // ======================= SEQUENCER =======================
