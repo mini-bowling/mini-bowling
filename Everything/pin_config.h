@@ -16,7 +16,11 @@
 #ifndef DIR_PIN
 #define DIR_PIN         3
 #endif
-// #define STEPPER_ENABLE_PIN  22  // Uncomment if your driver has an enable pin
+// Uncomment STEPPER_ENABLE_PIN if stepper uses an enable pin 
+// (required for user reset button w/ maintenance mode)
+#ifndef STEPPER_ENABLE_PIN      
+#define STEPPER_ENABLE_PIN  49  
+#endif                         
 
 // =====================================================
 // RELAY PIN
@@ -67,7 +71,7 @@
 #endif
 
 // =====================================================
-// PINSETTER RESET PIN
+// PINSETTER RESET (BUTTON) PIN
 // =====================================================
 #ifndef PINSETTER_RESET_PIN
 #define PINSETTER_RESET_PIN 41
