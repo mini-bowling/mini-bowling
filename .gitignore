@@ -1,1 +1,4 @@
 *.user.h
+
+# PlatformIO build artifacts
+.pio/
