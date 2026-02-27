@@ -1,0 +1,2546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mini Bowling – Config Tool v1.0.0</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%232563eb'/><circle cx='16' cy='13' r='6' fill='white'/><circle cx='13' cy='12' r='1.2' fill='%232563eb'/><circle cx='19' cy='12' r='1.2' fill='%232563eb'/><circle cx='16' cy='15' r='1.2' fill='%232563eb'/><rect x='10' y='22' width='12' height='3' rx='1.5' fill='white' opacity='0.7'/></svg>">
+  <style>
+    :root {
+      --bg:           #f0f4fb;
+      --surface:      #ffffff;
+      --surface-2:    #eaf0ff;
+      --surface-3:    #dde6f8;
+      --border:       #c0cfe8;
+      --border-light: #97b0d4;
+      --text:         #18243e;
+      --text-muted:   #4a6080;
+      --text-dim:     #8aaccc;
+      --accent:       #2563eb;
+      --accent-hover: #1d4ed8;
+      --accent-dim:   #dbeafe;
+      --success:      #16a34a;
+      --warning:      #b45309;
+      --warning-dim:  #fef3c7;
+      --error:        #dc2626;
+      --error-dim:    #fee2e2;
+      --modified:     #7c3aed;
+      --modified-dim: #ede9fe;
+      --radius:       10px;
+      --radius-sm:    6px;
+      --radius-xs:    4px;
+      --shadow:       0 2px 12px rgba(0,0,0,0.08);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Roboto', system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    code, .mono {
+      font-family: 'Consolas', 'JetBrains Mono', 'Fira Code', 'Monaco', monospace;
+    }
+
+    /* ─── Header ─────────────────────────────────── */
+
+    .site-header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 28px;
+      position: sticky;
+      top: 0;
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      height: 68px;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.10);
+    }
+
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .header-logo {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, #5eabff, #a855f7, #ec4899);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .header-title h1 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+      white-space: nowrap;
+    }
+
+    .header-title .subtitle {
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    /* ─── Tab bar ─────────────────────────────────── */
+
+    .tab-bar {
+      background: var(--surface);
+      border-bottom: 2px solid var(--border);
+      position: sticky;
+      top: 68px;
+      z-index: 190;
+      display: flex;
+      padding: 0 24px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: none;
+      border-bottom: 3px solid transparent;
+      padding: 0 20px;
+      height: 46px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: color 0.15s, border-bottom-color 0.15s;
+      margin-bottom: -2px;
+      white-space: nowrap;
+    }
+
+    .tab-btn:hover { color: var(--text); }
+
+    .tab-btn.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+
+    /* ─── Tab panes ───────────────────────────────── */
+
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    /* ─── Tab toolbar ─────────────────────────────── */
+
+    .tab-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+
+    /* ─── Buttons ─────────────────────────────────── */
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      transition: background 0.15s, opacity 0.15s, box-shadow 0.15s;
+      white-space: nowrap;
+      font-family: inherit;
+    }
+
+    .btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+      box-shadow: 0 0 0 0 rgba(59,130,246,0.4);
+    }
+    .btn-primary:not(:disabled):hover {
+      background: var(--accent-hover);
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.25);
+    }
+    .btn-primary:disabled {
+      background: var(--surface-3);
+      color: var(--text-dim);
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover {
+      background: var(--surface-2);
+      color: var(--text);
+      border-color: var(--border-light);
+    }
+
+    /* ─── Main layout ─────────────────────────────── */
+
+    .main {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 28px 28px 60px;
+    }
+
+    /* ─── Instructions panel ──────────────────────── */
+
+    .instructions {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 24px;
+      overflow: hidden;
+    }
+
+    .instructions-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+      cursor: pointer;
+      user-select: none;
+      gap: 12px;
+    }
+    .instructions-toggle:hover { background: var(--surface-2); }
+
+    .instructions-toggle-label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .info-icon {
+      width: 20px;
+      height: 20px;
+      background: var(--accent-dim);
+      border: 1px solid var(--accent);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .chevron {
+      color: var(--text-dim);
+      transition: transform 0.2s;
+      font-size: 12px;
+    }
+    .chevron.open { transform: rotate(180deg); }
+
+    .instructions-body {
+      padding: 18px;
+      border-top: 1px solid var(--border);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    .instructions-body.collapsed { display: none; }
+
+    @media (max-width: 760px) {
+      .instructions-body { grid-template-columns: 1fr; }
+    }
+
+    .instr-disclaimer {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 10px 14px;
+      background: var(--warning-dim);
+      border: 1px solid var(--warning);
+      border-radius: var(--radius-xs);
+      font-size: 12px;
+      color: #92400e;
+      line-height: 1.5;
+    }
+    .instr-disclaimer-icon { flex-shrink: 0; font-size: 14px; margin-top: 1px; }
+
+    .instr-section h3 {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    .steps { list-style: none; counter-reset: steps; display: flex; flex-direction: column; gap: 10px; }
+
+    .steps li {
+      counter-increment: steps;
+      display: flex;
+      gap: 14px;
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.6;
+      align-items: flex-start;
+    }
+
+    .steps li > span, .steps li > p { flex: 1; min-width: 0; }
+
+    .steps li::before {
+      content: counter(steps);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--accent-dim);
+      border: 1.5px solid var(--accent);
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 700;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .steps li strong { color: var(--text); }
+
+    .file-paths {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .file-path {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xs);
+      padding: 6px 10px;
+      font-size: 12px;
+      color: var(--accent);
+      font-family: monospace;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .file-path::before { content: '📄'; font-size: 13px; }
+
+    .legend-grid {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 8px 12px;
+      align-items: center;
+    }
+
+    .legend-swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+
+    .legend-label {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .legend-label strong { color: var(--text); }
+
+    /* ─── Alert bar ───────────────────────────────── */
+
+    .alert {
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      margin-bottom: 20px;
+      border: 1px solid;
+      display: none;
+    }
+    .alert.visible { display: block; }
+
+    .alert-conflict {
+      background: var(--warning-dim);
+      border-color: var(--warning);
+    }
+
+    .alert-title {
+      font-size: 13px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .alert-conflict .alert-title { color: var(--warning); }
+
+    .alert-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .alert-conflict .alert-list { color: #92400e; }
+    .alert-list li { font-size: 12px; }
+
+    /* ─── Stats bar ───────────────────────────────── */
+
+    .stats-bar {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      margin-bottom: 20px;
+      padding: 10px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+    }
+
+    .stat {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .stat-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .stat-count { font-weight: 600; color: var(--text); }
+
+    .stats-bar-spacer { flex: 1; }
+
+    .valid-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .valid-indicator.ok { color: var(--success); }
+    .valid-indicator.error { color: var(--error); }
+
+    /* ─── Groups grid ─────────────────────────────── */
+
+    .groups-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(520px, 1fr));
+      gap: 18px;
+      align-items: start;
+    }
+
+    .group-full { grid-column: 1 / -1; }
+
+    @media (max-width: 680px) {
+      .groups-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ─── Card ────────────────────────────────────── */
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .card-header {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface-2);
+    }
+
+    .card-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .card-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      background: var(--surface-3);
+      border: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .card-subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 3px;
+      margin-left: 38px;
+    }
+
+    .card-body { }
+
+    /* ─── Pins grid (2-col for full-width cards) ──── */
+
+    .pins-2col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    @media (max-width: 900px) {
+      .pins-2col { grid-template-columns: 1fr; }
+    }
+
+    /* ─── Group note ──────────────────────────────── */
+
+    .group-note {
+      margin: 12px 16px 4px;
+      padding: 8px 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xs);
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    /* ─── Pin row ─────────────────────────────────── */
+
+    .pin-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      padding: 10px 16px;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+      border-left: 3px solid transparent;
+      transition: background 0.1s, border-left-color 0.15s;
+    }
+
+    .pin-row:last-child { border-bottom: none; }
+    .pin-row:hover { background: var(--surface-2); }
+
+    /* State variants */
+    .pin-row.state-modified   { border-left-color: var(--modified); }
+    .pin-row.state-conflict   { border-left-color: var(--warning); background: var(--warning-dim); }
+    .pin-row.state-invalid    { border-left-color: var(--error);   background: var(--error-dim); }
+    .pin-row.state-disabled .pin-left,
+    .pin-row.state-disabled .pin-default,
+    .pin-row.state-disabled .pin-input { opacity: 0.5; }
+
+    .pin-row:hover.state-conflict { background: #fde68a; }
+    .pin-row:hover.state-invalid  { background: #fecaca; }
+
+    .pin-left { min-width: 0; }
+
+    .pin-name {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text);
+      font-family: 'Consolas', 'JetBrains Mono', monospace;
+      line-height: 1.3;
+    }
+
+    .pin-desc {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+      line-height: 1.4;
+    }
+
+    .pin-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .pin-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 10px;
+      white-space: nowrap;
+      letter-spacing: 0.02em;
+    }
+    .pin-badge.conflict { background: var(--warning-dim); color: var(--warning); }
+    .pin-badge.invalid  { background: var(--error-dim);   color: var(--error); }
+    .pin-badge.modified { background: var(--modified-dim); color: var(--modified); }
+
+    .pin-default {
+      font-size: 11px;
+      color: var(--text-dim);
+      font-family: monospace;
+      white-space: nowrap;
+    }
+
+    /* ─── Pin / Config input ──────────────────────── */
+
+    .pin-input {
+      width: 76px;
+      background: var(--bg);
+      border: 1.5px solid var(--border);
+      color: var(--text);
+      padding: 5px 8px;
+      border-radius: var(--radius-xs);
+      font-family: 'Consolas', 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .pin-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.2);
+    }
+
+    .pin-input.input-conflict { border-color: var(--warning); }
+    .pin-input.input-invalid  { border-color: var(--error); }
+    .pin-input.input-modified { border-color: var(--modified); }
+    .pin-input:disabled { background: var(--surface-2); cursor: not-allowed; }
+
+    /* Wider input for config values (longer strings like -1600, 300000) */
+    .pin-input.config-input { width: 90px; }
+
+    /* ─── Optional toggle ─────────────────────────── */
+
+    .opt-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .opt-label {
+      font-size: 11px;
+      color: var(--text-dim);
+      white-space: nowrap;
+    }
+
+    .toggle {
+      position: relative;
+      width: 30px;
+      height: 17px;
+      flex-shrink: 0;
+    }
+
+    .toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+
+    .toggle-track {
+      position: absolute;
+      inset: 0;
+      background: var(--surface-3);
+      border-radius: 17px;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      transition: background 0.2s, border-color 0.2s;
+    }
+
+    .toggle-thumb {
+      position: absolute;
+      width: 11px;
+      height: 11px;
+      left: 3px;
+      top: 3px;
+      background: var(--text-dim);
+      border-radius: 50%;
+      cursor: pointer;
+      transition: transform 0.2s, background 0.2s;
+    }
+
+    .toggle input:checked + .toggle-track { background: var(--accent); border-color: var(--accent); }
+    .toggle input:checked + .toggle-track + .toggle-thumb { transform: translateX(13px); background: white; }
+    .toggle input:not(:checked) ~ .toggle-track ~ .toggle-thumb { background: var(--text-dim); }
+
+    /* Focus ring for toggle */
+    .toggle input:focus-visible + .toggle-track {
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.35);
+    }
+
+    /* ─── Footer ──────────────────────────────────── */
+
+    .footer {
+      max-width: 1280px;
+      margin: 32px auto 0;
+      padding: 0 28px;
+      text-align: center;
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    /* ─── Scrollbar ───────────────────────────────── */
+
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
+
+    /* ─── Responsive ──────────────────────────────── */
+
+    @media (max-width: 600px) {
+      .site-header { height: auto; padding: 12px 16px; flex-wrap: wrap; position: static; }
+      .tab-bar { position: static; }
+      .main { padding: 16px 16px 40px; }
+      .stats-bar { flex-wrap: wrap; gap: 10px; }
+    }
+
+    /* ─── Board Diagram ───────────────────────────── */
+
+    .board-wrap {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .board-wrap svg {
+      display: block;
+      width: 100%;
+      max-width: 620px;
+      min-width: 400px;
+    }
+
+    .board-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 20px;
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .board-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .board-legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* ─── Load banner ─────────────────────────────── */
+
+    .load-banner {
+      position: fixed;
+      top: 122px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-10px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.22s, transform 0.22s;
+      z-index: 500;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 20px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      border: 1px solid;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+      white-space: nowrap;
+      min-width: 260px;
+    }
+    .load-banner.visible {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+      pointer-events: auto;
+    }
+    .load-banner code { font-family: monospace; font-size: 12px; }
+
+    .load-banner-ok   { background: #d1fae5; border-color: #059669; color: #065f46; }
+    .load-banner-warn { background: #fef3c7; border-color: var(--warning); color: #92400e; }
+
+    /* ─── Modals ──────────────────────────────────── */
+
+    .modal-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.35);
+      z-index: 600;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .modal-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px 32px;
+      max-width: 440px;
+      width: calc(100% - 40px);
+      box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+    }
+    .modal-box h3 { margin: 0 0 10px; font-size: 16px; color: var(--text); }
+    .modal-box p  { margin: 0 0 10px; font-size: 13px; color: var(--text-muted); line-height: 1.55; }
+    .modal-box p.modal-sub { font-size: 12px; }
+    .modal-icon { font-size: 26px; margin-bottom: 8px; color: var(--success); }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+    .board-tooltip {
+      position: fixed;
+      display: none;
+      background: #18243e;
+      color: #f0f6ff;
+      font-size: 12px;
+      font-family: 'Consolas', 'JetBrains Mono', monospace;
+      padding: 5px 11px;
+      border-radius: 5px;
+      pointer-events: none;
+      z-index: 9999;
+      white-space: nowrap;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════ HEADER -->
+<header class="site-header">
+  <div class="header-brand">
+    <div class="header-logo">🎳</div>
+    <div class="header-title">
+      <h1>Pinsetter Config Tool</h1>
+      <div class="subtitle">Mini Bowling Pinsetter &mdash; Arduino Mega &nbsp;&middot;&nbsp; v1.0.0</div>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════════ TAB BAR -->
+<div class="tab-bar">
+  <button class="tab-btn active" data-tab="general" onclick="switchTab('general')">Calibration</button>
+  <button class="tab-btn" data-tab="pins" onclick="switchTab('pins')">Pin Assignments</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ MAIN -->
+<main class="main">
+
+  <!-- ══════════════════════ CALIBRATION TAB -->
+  <div class="tab-pane active" id="tab-general">
+
+    <!-- Toolbar -->
+    <div class="tab-toolbar">
+      <button class="btn btn-ghost" onclick="triggerGeneralFileLoad()">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 10v3a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-3" stroke-linecap="round"/>
+          <polyline points="11,5 8,2 5,5" stroke-linecap="round" stroke-linejoin="round"/>
+          <line x1="8" y1="2" x2="8" y2="10" stroke-linecap="round"/>
+        </svg>
+        Load Config
+      </button>
+      <input type="file" id="genConfigFileInput" accept=".h" style="display:none"
+             onchange="handleGeneralFileLoad(event)">
+      <button class="btn btn-ghost" onclick="resetGeneralToDefaults()">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M13 8A5 5 0 1 1 8 3" stroke-linecap="round"/>
+          <polyline points="13,3 13,8 8,8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Reset to Defaults
+      </button>
+      <button class="btn btn-primary" id="genDownloadBtn" onclick="downloadGeneralConfig()">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M8 2v8M5 7l3 3 3-3" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M3 13h10" stroke-linecap="round"/>
+        </svg>
+        Download general_config.user.h
+      </button>
+    </div>
+
+    <!-- Instructions accordion -->
+    <div class="instructions">
+      <div class="instructions-toggle" onclick="toggleGenInstructions()" role="button" tabindex="0"
+           onkeydown="if(event.key==='Enter'||event.key===' ')toggleGenInstructions()">
+        <span class="instructions-toggle-label">
+          <span class="info-icon">i</span>
+          How to use this tool
+        </span>
+        <span class="chevron open" id="genChevron">▾</span>
+      </div>
+      <div class="instructions-body" id="genInstructionsBody">
+        <div class="instr-section">
+          <h3>Steps</h3>
+          <ol class="steps">
+            <li><span>Edit calibration values in the fields below. Each field shows the default value for reference.</span></li>
+            <li><span>Click <strong>Download general_config.user.h</strong> — the button is
+              disabled if any value is invalid.</span>
+            </li>
+            <li><span>Copy the downloaded file into <em>one or both</em> sketch directories:
+              <div class="file-paths">
+                <span class="file-path">Everything/general_config.user.h</span>
+                <span class="file-path">Master_Test/general_config.user.h</span>
+              </div></span>
+            </li>
+            <li><span>The sketch automatically uses <strong>general_config.user.h</strong> when it
+              exists — no code changes needed.</span>
+            </li>
+          </ol>
+        </div>
+        <div class="instr-section">
+          <h3>Color legend</h3>
+          <div class="legend-grid">
+            <div class="legend-swatch" style="background:var(--modified)"></div>
+            <div class="legend-label"><strong>Purple</strong> — Value changed from default</div>
+            <div class="legend-swatch" style="background:var(--error)"></div>
+            <div class="legend-label"><strong>Red</strong> — Invalid value</div>
+          </div>
+          <div style="margin-top: 16px;">
+            <h3 style="margin-bottom:8px;">Value types</h3>
+            <div class="legend-grid">
+              <code class="mono" style="font-size:12px;color:var(--accent);">angle</code>
+              <div class="legend-label">Integer 0–180 (servo degrees)</div>
+              <code class="mono" style="font-size:12px;color:var(--accent);">uint</code>
+              <div class="legend-label">Non-negative integer (ms, counts, baud)</div>
+              <code class="mono" style="font-size:12px;color:var(--accent);">int</code>
+              <div class="legend-label">Any integer including negative (step offsets)</div>
+              <code class="mono" style="font-size:12px;color:var(--accent);">ufloat</code>
+              <div class="legend-label">Positive decimal (steps/sec, steps/sec²)</div>
+              <code class="mono" style="font-size:12px;color:var(--accent);">binary</code>
+              <div class="legend-label">Exactly 0 or 1</div>
+            </div>
+          </div>
+        </div>
+        <div class="instr-disclaimer">
+          <span class="instr-disclaimer-icon">⚠</span>
+          <span>Servo angle values must stay within 0–180°. Values outside this range are invalid.
+            Always verify mechanical clearances before uploading — incorrect calibration can cause
+            hardware damage.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats bar -->
+    <div class="stats-bar">
+      <div class="stat">
+        <div class="stat-dot" style="background:var(--modified)"></div>
+        <span><span class="stat-count" id="genStatModified">0</span> modified</span>
+      </div>
+      <div class="stat">
+        <div class="stat-dot" style="background:var(--error)"></div>
+        <span><span class="stat-count" id="genStatInvalid">0</span> invalid</span>
+      </div>
+      <div class="stats-bar-spacer"></div>
+      <div class="valid-indicator ok" id="genValidIndicator">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M3 8l4 4 6-6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Ready to download
+      </div>
+    </div>
+
+    <!-- Config groups grid -->
+    <div class="groups-grid" id="genGroupsGrid"></div>
+
+  </div><!-- /tab-general -->
+
+  <!-- ══════════════════════ PIN ASSIGNMENTS TAB -->
+  <div class="tab-pane" id="tab-pins">
+
+    <!-- Toolbar -->
+    <div class="tab-toolbar">
+      <button class="btn btn-ghost" onclick="triggerFileLoad()">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 10v3a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-3" stroke-linecap="round"/>
+          <polyline points="11,5 8,2 5,5" stroke-linecap="round" stroke-linejoin="round"/>
+          <line x1="8" y1="2" x2="8" y2="10" stroke-linecap="round"/>
+        </svg>
+        Load Config
+      </button>
+      <input type="file" id="configFileInput" accept=".h" style="display:none"
+             onchange="handleFileLoad(event)">
+      <button class="btn btn-ghost" onclick="resetToDefaults()">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M13 8A5 5 0 1 1 8 3" stroke-linecap="round"/>
+          <polyline points="13,3 13,8 8,8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Reset to Defaults
+      </button>
+      <button class="btn btn-primary" id="downloadBtn" onclick="downloadConfig()">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M8 2v8M5 7l3 3 3-3" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M3 13h10" stroke-linecap="round"/>
+        </svg>
+        Download pin_config.user.h
+      </button>
+    </div>
+
+    <!-- Instructions accordion -->
+    <div class="instructions">
+      <div class="instructions-toggle" onclick="toggleInstructions()" role="button" tabindex="0"
+           onkeydown="if(event.key==='Enter'||event.key===' ')toggleInstructions()">
+        <span class="instructions-toggle-label">
+          <span class="info-icon">i</span>
+          How to use this tool
+        </span>
+        <span class="chevron open" id="chevron">▾</span>
+      </div>
+      <div class="instructions-body" id="instructionsBody">
+        <div class="instr-section">
+          <h3>Steps</h3>
+          <ol class="steps">
+            <li><span>Edit pin numbers in the fields below. Each field shows the default value for reference.</span></li>
+            <li><span>Click <strong>Download pin_config.user.h</strong> — the button is
+              disabled if there are validation errors or pin conflicts.</span>
+            </li>
+            <li><span>Copy the downloaded file into <em>one or both</em> sketch directories:
+              <div class="file-paths">
+                <span class="file-path">Everything/pin_config.user.h</span>
+                <span class="file-path">Master_Test/pin_config.user.h</span>
+              </div></span>
+            </li>
+            <li><span>The sketch automatically uses <strong>pin_config.user.h</strong> when it
+              exists — no code changes needed.</span>
+            </li>
+          </ol>
+        </div>
+        <div class="instr-section">
+          <h3>Color legend</h3>
+          <div class="legend-grid">
+            <div class="legend-swatch" style="background:var(--modified)"></div>
+            <div class="legend-label"><strong>Purple</strong> — Value changed from default</div>
+            <div class="legend-swatch" style="background:var(--warning)"></div>
+            <div class="legend-label"><strong>Amber</strong> — Pin conflict (same number used twice)</div>
+            <div class="legend-swatch" style="background:var(--error)"></div>
+            <div class="legend-label"><strong>Red</strong> — Invalid pin number</div>
+          </div>
+          <div style="margin-top: 16px;">
+            <h3 style="margin-bottom:8px;">Valid pin formats</h3>
+            <div class="legend-grid">
+              <code class="mono" style="font-size:12px;color:var(--accent);">0–53</code>
+              <div class="legend-label">Digital pins on Arduino Mega</div>
+              <code class="mono" style="font-size:12px;color:var(--accent);">A0–A15</code>
+              <div class="legend-label">Analog pins (case-insensitive)</div>
+            </div>
+          </div>
+        </div>
+        <div class="instr-disclaimer">
+          <span class="instr-disclaimer-icon">⚠</span>
+          <span>Not all Arduino pins support the same functionality. Some pins have hardware
+            restrictions (PWM, interrupts, serial, I²C, SPI, etc.) that may affect how
+            components behave. Reassigning pins should be done at your own discretion — verify
+            that the chosen pin supports the required function before uploading.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Conflict alert -->
+    <div class="alert alert-conflict" id="conflictAlert">
+      <div class="alert-title">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M8 1L15 14H1L8 1z" stroke-linejoin="round"/>
+          <path d="M8 6v4M8 11v1" stroke-linecap="round"/>
+        </svg>
+        Pin Conflicts Detected
+      </div>
+      <ul class="alert-list" id="conflictList"></ul>
+    </div>
+
+    <!-- Stats bar -->
+    <div class="stats-bar">
+      <div class="stat">
+        <div class="stat-dot" style="background:var(--modified)"></div>
+        <span><span class="stat-count" id="statModified">0</span> modified</span>
+      </div>
+      <div class="stat">
+        <div class="stat-dot" style="background:var(--warning)"></div>
+        <span><span class="stat-count" id="statConflicts">0</span> conflicts</span>
+      </div>
+      <div class="stat">
+        <div class="stat-dot" style="background:var(--error)"></div>
+        <span><span class="stat-count" id="statInvalid">0</span> invalid</span>
+      </div>
+      <div class="stats-bar-spacer"></div>
+      <div class="valid-indicator ok" id="validIndicator">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M3 8l4 4 6-6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Ready to download
+      </div>
+    </div>
+
+    <!-- Board diagram -->
+    <div class="card" style="margin-bottom:22px;">
+      <div class="card-header">
+        <div class="card-title"><div class="card-icon">🔌</div>Arduino Mega 2560 — Pin Layout</div>
+        <div class="card-subtitle">Pins are color-coded by group &nbsp;·&nbsp; Hover a pin to see its assignment</div>
+      </div>
+      <div class="card-body" style="padding:16px 18px 18px;">
+        <div class="board-wrap" id="boardDiagram"></div>
+        <div class="board-legend" id="boardLegend"></div>
+      </div>
+    </div>
+
+    <!-- Pin groups grid -->
+    <div class="groups-grid" id="groupsGrid"></div>
+
+  </div><!-- /tab-pins -->
+
+</main>
+
+<div class="footer">
+  Configuration Tool v1.0.0
+  &nbsp;·&nbsp;
+  All processing happens in your browser — no data is sent anywhere.
+  &nbsp;·&nbsp;
+  Open <strong>index.html</strong> directly from the filesystem, no server required.
+</div>
+
+<!-- ═══════════════════════════════════════════════════ SCRIPT -->
+<script>
+'use strict';
+
+// ─────────────────────────────────────────────────────── GENERAL CONFIG DATA
+
+const GENERAL_GROUPS = [
+  {
+    id: 'scoremore',
+    title: 'ScoreMore Serial',
+    icon: '📡',
+    desc: 'Serial communication baud rate',
+    params: [
+      { name: 'SCOREMORE_BAUD', def: '9600', type: 'uint', desc: 'Baud rate for ScoreMore serial communication' },
+    ],
+  },
+  {
+    id: 'ledlength',
+    title: 'LED Strip Lengths',
+    icon: '🌈',
+    desc: 'Number of LEDs in each strip (left and right can differ)',
+    params: [
+      { name: 'DECK_LED_LENGTH_L', def: '11', type: 'uint', desc: 'Left deck strip LED count' },
+      { name: 'DECK_LED_LENGTH_R', def: '11', type: 'uint', desc: 'Right deck strip LED count' },
+      { name: 'LANE_LED_LENGTH_L', def: '41', type: 'uint', desc: 'Left lane strip LED count' },
+      { name: 'LANE_LED_LENGTH_R', def: '41', type: 'uint', desc: 'Right lane strip LED count' },
+    ],
+  },
+  {
+    id: 'conveyor',
+    title: 'Conveyor Settings',
+    icon: '⚙️',
+    desc: 'Conveyor relay polarity',
+    params: [
+      { name: 'CONVEYOR_ACTIVE_HIGH', def: '1', type: 'binary', desc: 'Relay polarity: 1 = active HIGH, 0 = active LOW' },
+    ],
+  },
+  {
+    id: 'ledbrightness',
+    title: 'LED Brightness',
+    icon: '💡',
+    desc: 'LED brightness levels (0–255)',
+    params: [
+      { name: 'LED_BRIGHTNESS_NORMAL', def: '80', type: 'uint', desc: 'Lane LED brightness (0–255)', min: 0, max: 255 },
+      { name: 'DECK_LED_BRIGHTNESS',   def: '80', type: 'uint', desc: 'Deck LED brightness (0–255)', min: 0, max: 255 },
+      { name: 'LED_BRIGHTNESS_STRIKE', def: '40', type: 'uint', desc: 'Strike animation brightness, reduced from normal (0–255)', min: 0, max: 255 },
+    ],
+  },
+  {
+    id: 'sweep',
+    title: 'Sweep Servo',
+    icon: '🦾',
+    desc: 'Left/right sweep arm positions — right servo is mirrored (R = 180 − L)',
+    params: [
+      { name: 'SWEEP_GUARD_ANGLE', def: '50',  type: 'angle', desc: 'Guard position: arms partly block the lane as a backstop' },
+      { name: 'SWEEP_UP_ANGLE',    def: '85',  type: 'angle', desc: 'Up position: arms raised out of the lane path' },
+      { name: 'SWEEP_BACK_ANGLE',  def: '0',   type: 'angle', desc: 'Back position: arms sweep fully back, pushing pins off lane' },
+      { name: 'SWEEP_TWEEN_MS',    def: '500', type: 'uint',  desc: 'Tween duration (ms) — larger = slower, smoother sweep motion' },
+    ],
+  },
+  {
+    id: 'balldoor',
+    title: 'Ball Door Servo',
+    icon: '🚪',
+    desc: 'Ball return door servo angles',
+    params: [
+      { name: 'BALL_DOOR_OPEN_ANGLE',   def: '180', type: 'angle', desc: 'Open position: door clear, ball passes through to return track' },
+      { name: 'BALL_DOOR_CLOSED_ANGLE', def: '0',   type: 'angle', desc: 'Closed position: door blocks pins from rolling out' },
+    ],
+  },
+  {
+    id: 'scissor',
+    title: 'Scissor Servo',
+    icon: '✂️',
+    desc: 'Deck scissor mechanism angles',
+    params: [
+      { name: 'SCISSOR_GRAB_ANGLE', def: '140', type: 'angle', desc: 'Grab position: scissor grips and holds pins on the deck' },
+      { name: 'SCISSOR_DROP_ANGLE', def: '90',  type: 'angle', desc: 'Drop/open position: scissor opens so pins can slide through' },
+    ],
+  },
+  {
+    id: 'slider',
+    title: 'Sliding Deck Servo',
+    icon: '↔️',
+    desc: 'Sliding deck catch and release positions',
+    params: [
+      { name: 'SLIDER_HOME_ANGLE',    def: '180', type: 'angle', desc: 'Home / catch position: retracted, ready to receive pins from turret' },
+      { name: 'SLIDER_RELEASE_ANGLE', def: '100', type: 'angle', desc: 'Release position: extended, drops pins down to lane surface' },
+    ],
+  },
+  {
+    id: 'raise',
+    title: 'Raise Servo',
+    icon: '⬆️',
+    desc: 'Deck raise/lower positions — left and right always paired',
+    params: [
+      { name: 'RAISE_UP_ANGLE',   def: '180', type: 'angle', desc: 'Up position: deck fully raised, clear of lane' },
+      { name: 'RAISE_DOWN_ANGLE', def: '20',  type: 'angle', desc: 'Down/Set position: deck fully lowered, used for setting pins on lane' },
+      { name: 'RAISE_GRAB_ANGLE', def: '60',  type: 'angle', desc: 'Grab position: scissors at picking height to lift pins from lane' },
+      { name: 'RAISE_DROP_ANGLE', def: '80',  type: 'angle', desc: 'Drop position: re-drop height for pins already held by scissors (not full-down)' },
+    ],
+  },
+  {
+    id: 'turretstepper',
+    title: 'Turret Stepper',
+    icon: '🔧',
+    desc: 'Stepper motor speeds and position offsets',
+    full: true,
+    params: [
+      { name: 'TURRET_NORMAL_MAXSPEED',      def: '650.0',  type: 'ufloat', desc: 'Normal max speed (steps/sec)' },
+      { name: 'TURRET_NORMAL_ACCEL',         def: '3000.0', type: 'ufloat', desc: 'Normal acceleration (steps/sec²)' },
+      { name: 'TURRET_SPRING_MAXSPEED',      def: '300.0',  type: 'ufloat', desc: 'Spring-safe max speed for moving to release position (steps/sec)' },
+      { name: 'TURRET_SPRING_ACCEL',         def: '1500.0', type: 'ufloat', desc: 'Spring-safe acceleration (steps/sec²)' },
+      { name: 'TURRET_HOME_ADJUSTER',        def: '-63',    type: 'int',    desc: 'Fine-tune home position after homing (steps; less negative = CCW)' },
+      { name: 'TURRET_PIN10_RELEASE_OFFSET', def: '-30',    type: 'int',    desc: 'Extra offset applied to the release position (slot 10)' },
+      { name: 'TURRET_EMPTY_EXTRA_OFFSET',   def: '-60',    type: 'int',    desc: 'Extra offset for empty-turret purge at boot' },
+    ],
+  },
+  {
+    id: 'turretpos',
+    title: 'Turret Pin Positions',
+    icon: '📍',
+    desc: 'Stepper step positions for each slot, relative to home (slot 0)',
+    full: true,
+    params: [
+      { name: 'PIN_POS_0',  def: '0',     type: 'int', desc: 'Slot 0 — home reference position (unused for pins)' },
+      { name: 'PIN_POS_1',  def: '-133',  type: 'int', desc: 'Slot 1 — first pin position' },
+      { name: 'PIN_POS_2',  def: '-267',  type: 'int', desc: 'Slot 2' },
+      { name: 'PIN_POS_3',  def: '-400',  type: 'int', desc: 'Slot 3' },
+      { name: 'PIN_POS_4',  def: '-667',  type: 'int', desc: 'Slot 4' },
+      { name: 'PIN_POS_5',  def: '-800',  type: 'int', desc: 'Slot 5' },
+      { name: 'PIN_POS_6',  def: '-933',  type: 'int', desc: 'Slot 6' },
+      { name: 'PIN_POS_7',  def: '-1200', type: 'int', desc: 'Slot 7' },
+      { name: 'PIN_POS_8',  def: '-1333', type: 'int', desc: 'Slot 8' },
+      { name: 'PIN_POS_9',  def: '-1467', type: 'int', desc: 'Slot 9 — ninth pin' },
+      { name: 'PIN_POS_10', def: '-1600', type: 'int', desc: 'Slot 10 — release position (all pins fall off here)' },
+    ],
+  },
+  {
+    id: 'debounce',
+    title: 'Debounce',
+    icon: '⏱️',
+    desc: 'Input debounce timing',
+    params: [
+      { name: 'DEBOUNCE_MS', def: '50', type: 'uint', desc: 'Input debounce time (ms) — filters spurious signal edges' },
+    ],
+  },
+  {
+    id: 'turrettiming',
+    title: 'Turret Timing',
+    icon: '⏰',
+    desc: 'Pin catch and release timing during turret load',
+    params: [
+      { name: 'CATCH_DELAY_MS',         def: '800',  type: 'uint', desc: 'Settle pause after catching a pin at slots 1–8 (ms)' },
+      { name: 'RELEASE_DWELL_MS',       def: '1000', type: 'uint', desc: 'Dwell at release position while all pins fall onto deck (ms)' },
+      { name: 'RELEASE_FEED_ASSIST_MS', def: '250',  type: 'uint', desc: 'Conveyor assist run duration during release dwell (ms)' },
+      { name: 'NINTH_SETTLE_MS',        def: '300',  type: 'uint', desc: 'Settle pause after 9th pin caught before waiting for 10th (ms)' },
+    ],
+  },
+  {
+    id: 'everything',
+    title: 'Everything Timing',
+    icon: '🎳',
+    desc: 'Timing constants used only by Everything.ino',
+    full: true,
+    params: [
+      { name: 'DECK_EXTRA_SETTLE_MS',     def: '500',    type: 'uint', desc: 'Extra settle time added after each raise servo move (ms)' },
+      { name: 'STRIKE_WIPE_MS',           def: '300',    type: 'uint', desc: 'Strike LED wipe animation total duration (ms)' },
+      { name: 'STRIKE_FRAME_MS',          def: '15',     type: 'uint', desc: 'Strike LED wipe frame interval (ms)' },
+      { name: 'STRIKE_SWEEP_PAUSE_MS',    def: '1000',   type: 'uint', desc: 'Pause before sweep begins after a strike (ms)' },
+      { name: 'BALL_COMET_MS',            def: '500',    type: 'uint', desc: 'Ball comet LED animation total duration (ms)' },
+      { name: 'BALL_COMET_FRAME_MS',      def: '15',     type: 'uint', desc: 'Ball comet frame interval (ms)' },
+      { name: 'STARTUP_WIPE_MS_PER_STEP', def: '5',      type: 'uint', desc: 'Startup LED wipe: delay per LED step (ms)' },
+      { name: 'PAUSE_IDLE_MS',            def: '300000', type: 'uint', desc: 'Sweep-up idle timeout before pause mode triggers (ms); default = 5 min' },
+      { name: 'SCORE_INTERVAL',           def: '5',      type: 'uint', desc: 'Serial/input poll interval (ms)' },
+    ],
+  },
+  {
+    id: 'balltrigger',
+    title: 'Ball Trigger Timing',
+    icon: '🎯',
+    desc: 'Ball detection and door timing',
+    params: [
+      { name: 'BALL_LOW_CONFIRM_US',       def: '1000', type: 'uint', desc: 'Minimum duration to confirm ball sensor LOW (µs)' },
+      { name: 'BALL_REARM_MS',             def: '300',  type: 'uint', desc: 'Rearm delay after ball trigger fires (ms)' },
+      { name: 'SCOREMORE_BALL_PULSE_MS',   def: '150',  type: 'uint', desc: 'ScoreMore ball signal pulse duration (ms)' },
+      { name: 'BR_CLOSE_AFTER_SWEEPBACK_MS', def: '5000', type: 'uint', desc: 'Ball return door close delay after sweep-back completes (ms)' },
+    ],
+  },
+  {
+    id: 'conveyorresume',
+    title: 'Conveyor & Resume',
+    icon: '🔁',
+    desc: 'Conveyor idle timeout and post-set resume delay',
+    params: [
+      { name: 'NO_CATCH_TIMEOUT_MS',    def: '30000', type: 'uint', desc: 'Conveyor stall timeout: stops if no pin caught within this time (ms)' },
+      { name: 'RESUME_AFTER_DECKUP_MS', def: '2000',  type: 'uint', desc: 'Resume delay after deck is raised following pin set (ms)' },
+    ],
+  },
+  {
+    id: 'flash',
+    title: 'Flash Animation',
+    icon: '✨',
+    desc: 'Strike flash LED timing',
+    params: [
+      { name: 'FLASH_ON_MS',  def: '120', type: 'uint', desc: 'Flash on duration per cycle (ms)' },
+      { name: 'FLASH_OFF_MS', def: '120', type: 'uint', desc: 'Flash off duration per cycle (ms)' },
+      { name: 'FLASH_COUNT',  def: '3',   type: 'uint', desc: 'Number of flash on/off cycles' },
+    ],
+  },
+  {
+    id: 'comet',
+    title: 'Comet Animation',
+    icon: '💫',
+    desc: 'Comet LED trail length',
+    params: [
+      { name: 'COMET_LEN', def: '4', type: 'uint', desc: 'Comet tail length in pixels (used by lane LED comet effect)' },
+    ],
+  },
+  {
+    id: 'mastertest',
+    title: 'Master Test Settings',
+    icon: '🧪',
+    desc: 'Timing constants used only by Master_Test.ino',
+    full: true,
+    params: [
+      { name: 'IR_FLAP_COUNT',         def: '5',    type: 'uint', desc: 'IR sensor toggles within window to trigger flap detection' },
+      { name: 'IR_FLAP_WINDOW_MS',     def: '200',  type: 'uint', desc: 'Flap detection time window (ms)' },
+      { name: 'SCISSOR_CYCLE_MS',      def: '2000', type: 'uint', desc: 'Pause time during scissor open/close cycle test (ms)' },
+      { name: 'WIPE_MS',               def: '500',  type: 'uint', desc: 'LED wipe animation total duration (ms)' },
+      { name: 'WIPE_FRAME_MS',         def: '15',   type: 'uint', desc: 'Wipe animation frame interval (ms)' },
+      { name: 'RAINBOW_FRAME_MS',      def: '20',   type: 'uint', desc: 'Rainbow animation frame interval (ms)' },
+      { name: 'COMET_MS',              def: '500',  type: 'uint', desc: 'Comet animation total duration (ms)' },
+      { name: 'COMET_FRAME_MS',        def: '15',   type: 'uint', desc: 'Comet animation frame interval (ms)' },
+      { name: 'PDROP_SETTLE_MS',       def: '500',  type: 'uint', desc: 'Pin drop FSM: settle pause for small servo moves (ms)' },
+      { name: 'PDROP_RAISE_SETTLE_MS', def: '1300', type: 'uint', desc: 'Pin drop FSM: settle pause for raise servo full-travel moves (ms)' },
+      { name: 'PDROP_DROP_MS',         def: '800',  type: 'uint', desc: 'Pin drop FSM: pause for pins to fall after slider release (ms)' },
+      { name: 'FRAME_BLINK_INTERVAL',  def: '500',  type: 'uint', desc: 'Frame indicator LED blink interval (ms)' },
+    ],
+  },
+];
+
+// Build flat lookup: paramName → { param, group }
+const GENERAL_MAP = new Map();
+GENERAL_GROUPS.forEach(g => g.params.forEach(p => GENERAL_MAP.set(p.name, { param: p, group: g })));
+
+// ─────────────────────────────────────────────────────── PIN CONFIG DATA
+
+const PIN_GROUPS = [
+  {
+    id: 'stepper',
+    title: 'Stepper Motor',
+    icon: '⚙',
+    desc: 'Turret carousel rotation',
+    physical: true,
+    pins: [
+      { name: 'STEP_PIN',           def: '2',  desc: 'Step pulse output to stepper driver' },
+      { name: 'DIR_PIN',            def: '3',  desc: 'Direction output to stepper driver' },
+      { name: 'STEPPER_ENABLE_PIN', def: '22', desc: 'Enable pin — optional, only if your driver has one', optional: true },
+    ],
+  },
+  {
+    id: 'relay',
+    title: 'Relay',
+    icon: '⚡',
+    desc: 'Conveyor belt motor control',
+    physical: true,
+    pins: [
+      { name: 'MOTOR_RELAY_PIN', def: '4', desc: 'Conveyor motor relay — HIGH to run, LOW to stop' },
+    ],
+  },
+  {
+    id: 'sensors',
+    title: 'Sensor Inputs',
+    icon: '📡',
+    desc: 'Continuously monitored inputs',
+    physical: true,
+    pins: [
+      { name: 'IR_SENSOR_PIN',   def: '5',  desc: 'Cross-conveyor IR sensor — detects pins on conveyor' },
+      { name: 'HALL_EFFECT_PIN', def: '6',  desc: 'Hall effect sensor — turret homing reference point' },
+      { name: 'BALL_SENSOR_PIN', def: 'A0', desc: 'Ball detection sensor (trigger)' },
+      { name: 'BALL_SPEED_PIN',  def: 'A1', desc: 'Ball speed measurement sensor' },
+    ],
+  },
+  {
+    id: 'servos',
+    title: 'Servo Motors',
+    icon: '🦾',
+    desc: 'All servo motor outputs',
+    physical: true,
+    pins: [
+      { name: 'SCISSOR_PIN',     def: '7',  desc: 'Scissor mechanism — grips and releases pins from lane' },
+      { name: 'SLIDE_PIN',       def: '8',  desc: 'Sliding deck — extends to release pins, retracts to catch' },
+      { name: 'RAISE_LEFT_PIN',  def: '9',  desc: 'Left raise servo — raises and lowers deck assembly' },
+      { name: 'RAISE_RIGHT_PIN', def: '10', desc: 'Right raise servo — mirrored from left, always paired' },
+      { name: 'LEFT_SWEEP_PIN',  def: '11', desc: 'Left sweep arm — clears fallen pins from lane' },
+      { name: 'RIGHT_SWEEP_PIN', def: '12', desc: 'Right sweep arm — mirrored from left, always paired' },
+      { name: 'BALL_RETURN_PIN', def: '13', desc: 'Ball return door — opens to let ball through to return track' },
+    ],
+  },
+  {
+    id: 'reset',
+    title: 'Reset Input',
+    icon: '🔄',
+    desc: 'External pinsetter reset',
+    physical: true,
+    pins: [
+      { name: 'PINSETTER_RESET_PIN', def: '41', desc: 'External pinsetter reset trigger input' },
+    ],
+  },
+  {
+    id: 'frameleds',
+    title: 'Frame Indicator LEDs',
+    icon: '💡',
+    desc: 'Simple on/off frame status LEDs',
+    physical: true,
+    pins: [
+      { name: 'FRAME_LED1_PIN', def: '46', desc: 'Frame indicator LED 1' },
+      { name: 'FRAME_LED2_PIN', def: '47', desc: 'Frame indicator LED 2' },
+    ],
+  },
+  {
+    id: 'neopixel',
+    title: 'NeoPixel LED Strips',
+    icon: '🌈',
+    desc: 'Addressable LED strips for deck and lane',
+    physical: true,
+    pins: [
+      { name: 'DECK_PIN_L', def: '50', desc: 'Left deck LED strip' },
+      { name: 'DECK_PIN_R', def: '51', desc: 'Right deck LED strip' },
+      { name: 'LANE_PIN_L', def: '52', desc: 'Left lane LED strip' },
+      { name: 'LANE_PIN_R', def: '53', desc: 'Right lane LED strip' },
+    ],
+  },
+];
+
+// Build flat lookup: pinName → { pin, group }
+const PIN_MAP = new Map();
+PIN_GROUPS.forEach(g => g.pins.forEach(p => PIN_MAP.set(p.name, { pin: p, group: g })));
+
+// ─────────────────────────────────────────────────────── BOARD CONSTANTS
+
+const GROUP_COLORS = {
+  stepper:   '#f97316',
+  relay:     '#10b981',
+  sensors:   '#22d3ee',
+  servos:    '#60a5fa',
+  reset:     '#f472b6',
+  frameleds: '#facc15',
+  neopixel:  '#c084fc',
+};
+
+// Board geometry (viewBox 620×410)
+const BD = {
+  W: 620, H: 410, P: 20,
+  TY: 28,  D0X: 52,  D14X: 372,
+  VIX: 576, VOX: 596, VY0: 65,
+  BY: 385, AX: 252,  PX: 52,
+};
+
+// Coordinate lookup: normalized pin value → {x, y}
+const BOARD_PIN_POS = {};
+for (let n = 0; n <= 13; n++) BOARD_PIN_POS[String(n)]    = { x: BD.D0X  + n*BD.P, y: BD.TY };
+for (let n = 0; n <=  7; n++) BOARD_PIN_POS[String(14+n)] = { x: BD.D14X + n*BD.P, y: BD.TY };
+for (let c = 0; c <  16; c++) {
+  BOARD_PIN_POS[String(22+c*2)] = { x: BD.VIX, y: BD.VY0 + c*BD.P };
+  BOARD_PIN_POS[String(23+c*2)] = { x: BD.VOX, y: BD.VY0 + c*BD.P };
+}
+for (let n = 0; n <= 15; n++) BOARD_PIN_POS['A'+n] = { x: BD.AX + n*BD.P, y: BD.BY };
+
+// ─────────────────────────────────────────────────────── STATE
+
+// General config: current raw string value for each param
+const genValues = {};
+GENERAL_GROUPS.forEach(g => g.params.forEach(p => { genValues[p.name] = p.def; }));
+
+// Pin config: current string value for each pin
+const values = {};
+// whether optional pins are enabled
+const optEnabled = {};
+PIN_GROUPS.forEach(g => g.pins.forEach(p => {
+  values[p.name] = p.def;
+  if (p.optional) optEnabled[p.name] = false;
+}));
+
+// Tab state
+let activeTab = 'general';
+let _downloadingTab = 'general';
+
+// ─────────────────────────────────────────────────────── TAB SWITCHING
+
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('active', p.id === 'tab-' + tab));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+}
+
+// ─────────────────────────────────────────────────────── GENERAL VALIDATION
+
+/**
+ * Validate a raw config value string.
+ * @param {string} raw
+ * @param {string} type  'angle' | 'uint' | 'int' | 'ufloat' | 'binary'
+ * @param {number} [min]
+ * @param {number} [max]
+ * @returns {{ valid: boolean, value: string }}
+ */
+function validateConfigValue(raw, type, min, max) {
+  const s = raw.trim();
+  if (s === '') return { valid: false, value: '' };
+
+  switch (type) {
+    case 'angle': {
+      if (!/^-?\d+$/.test(s)) return { valid: false, value: s };
+      const n = parseInt(s, 10);
+      if (n < 0 || n > 180) return { valid: false, value: s };
+      return { valid: true, value: String(n) };
+    }
+    case 'uint': {
+      if (!/^\d+$/.test(s)) return { valid: false, value: s };
+      const n = parseInt(s, 10);
+      if (n < (min !== undefined ? min : 0)) return { valid: false, value: s };
+      if (max !== undefined && n > max) return { valid: false, value: s };
+      return { valid: true, value: String(n) };
+    }
+    case 'int': {
+      if (!/^-?\d+$/.test(s)) return { valid: false, value: s };
+      const n = parseInt(s, 10);
+      return { valid: true, value: String(n) };
+    }
+    case 'ufloat': {
+      const n = parseFloat(s);
+      if (isNaN(n) || n <= 0) return { valid: false, value: s };
+      return { valid: true, value: n.toFixed(1) };
+    }
+    case 'binary': {
+      if (s === '0') return { valid: true, value: '0' };
+      if (s === '1') return { valid: true, value: '1' };
+      return { valid: false, value: s };
+    }
+    default:
+      return { valid: false, value: s };
+  }
+}
+
+// ─────────────────────────────────────────────────────── GENERAL RENDER
+
+function renderGeneral() {
+  const grid = document.getElementById('genGroupsGrid');
+  grid.innerHTML = '';
+
+  GENERAL_GROUPS.forEach(g => {
+    const card = document.createElement('div');
+    card.className = 'card' + (g.full ? ' group-full' : '');
+
+    const header = document.createElement('div');
+    header.className = 'card-header';
+    header.innerHTML =
+      `<div class="card-title"><div class="card-icon">${g.icon || ''}</div>${g.title}</div>` +
+      `<div class="card-subtitle">${g.desc}</div>`;
+    card.appendChild(header);
+
+    const body = document.createElement('div');
+    body.className = 'card-body';
+
+    const paramContainer = document.createElement('div');
+    if (g.full) paramContainer.className = 'pins-2col';
+    body.appendChild(paramContainer);
+
+    g.params.forEach(p => paramContainer.appendChild(buildConfigRow(p, g)));
+    card.appendChild(body);
+    grid.appendChild(card);
+  });
+}
+
+function buildConfigRow(param, group) {
+  const raw = genValues[param.name];
+  const { valid } = validateConfigValue(raw, param.type, param.min, param.max);
+  const modified = valid && (validateConfigValue(raw, param.type, param.min, param.max).value !== param.def);
+
+  let rowState = '';
+  if (!valid)        rowState = 'state-invalid';
+  else if (modified) rowState = 'state-modified';
+
+  let inputClass = 'pin-input config-input';
+  if (!valid)        inputClass += ' input-invalid';
+  else if (modified) inputClass += ' input-modified';
+
+  let badge = '';
+  if (!valid)        badge = '<span class="pin-badge invalid">invalid</span>';
+  else if (modified) badge = '<span class="pin-badge modified">modified</span>';
+
+  const typeHint = { angle: '0–180°', uint: '≥ 0', int: 'integer', ufloat: '> 0', binary: '0 or 1' }[param.type] || '';
+  const maxHint  = param.max !== undefined ? `0–${param.max}` : typeHint;
+  const title    = `${param.type}${param.max !== undefined ? ' ' + maxHint : ' (' + typeHint + ')'}`;
+
+  const row = document.createElement('div');
+  row.className = `pin-row ${rowState}`;
+  row.id = `grow-${param.name}`;
+
+  row.innerHTML =
+    `<div class="pin-left">
+       <div class="pin-name mono">${param.name}</div>
+       <div class="pin-desc">${param.desc}</div>
+     </div>
+     <div class="pin-right">
+       <span class="pin-default">def:&nbsp;${param.def}</span>
+       ${badge}
+       <input type="text" class="${inputClass}" id="ginp-${param.name}"
+              value="${raw}" placeholder="${param.def}" title="${title}"
+              oninput="onConfigInput('${param.name}',this.value)">
+     </div>`;
+
+  return row;
+}
+
+function updateConfigRow(param) {
+  const row = document.getElementById(`grow-${param.name}`);
+  if (!row) return;
+
+  const raw = genValues[param.name];
+  const { valid, value } = validateConfigValue(raw, param.type, param.min, param.max);
+  const modified = valid && (value !== param.def);
+
+  let rowState = '';
+  if (!valid)        rowState = 'state-invalid';
+  else if (modified) rowState = 'state-modified';
+  row.className = `pin-row ${rowState}`;
+
+  const inp = document.getElementById(`ginp-${param.name}`);
+  if (inp) {
+    let inputClass = 'pin-input config-input';
+    if (!valid)        inputClass += ' input-invalid';
+    else if (modified) inputClass += ' input-modified';
+    inp.className = inputClass;
+    if (document.activeElement !== inp) inp.value = raw;
+  }
+
+  row.querySelector('.pin-badge')?.remove();
+  if (inp) {
+    let badgeHtml = '';
+    if (!valid)        badgeHtml = '<span class="pin-badge invalid">invalid</span>';
+    else if (modified) badgeHtml = '<span class="pin-badge modified">modified</span>';
+    if (badgeHtml) inp.insertAdjacentHTML('beforebegin', badgeHtml);
+  }
+}
+
+// ─────────────────────────────────────────────────────── GENERAL EVENTS
+
+function onConfigInput(paramName, rawValue) {
+  genValues[paramName] = rawValue;
+  const { param } = GENERAL_MAP.get(paramName);
+  updateConfigRow(param);
+  updateGeneralStatus();
+}
+
+function resetGeneralToDefaults() {
+  if (!confirm('Reset all calibration values to their defaults?')) return;
+  GENERAL_GROUPS.forEach(g => g.params.forEach(p => { genValues[p.name] = p.def; }));
+  renderGeneral();
+  updateGeneralStatus();
+}
+
+// ─────────────────────────────────────────────────────── GENERAL STATUS
+
+function updateGeneralStatus() {
+  let nModified = 0, nInvalid = 0;
+
+  GENERAL_GROUPS.forEach(g => g.params.forEach(p => {
+    const { valid, value } = validateConfigValue(genValues[p.name], p.type, p.min, p.max);
+    if (!valid) { nInvalid++; return; }
+    if (value !== p.def) nModified++;
+  }));
+
+  document.getElementById('genStatModified').textContent = nModified;
+  document.getElementById('genStatInvalid').textContent  = nInvalid;
+
+  const hasErrors = nInvalid > 0;
+  document.getElementById('genDownloadBtn').disabled = hasErrors;
+
+  const indicator = document.getElementById('genValidIndicator');
+  if (hasErrors) {
+    indicator.className = 'valid-indicator error';
+    indicator.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M4 4l8 8M12 4l-8 8" stroke-linecap="round"/>
+      </svg>
+      Fix errors to download`;
+  } else {
+    indicator.className = 'valid-indicator ok';
+    indicator.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M3 8l4 4 6-6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Ready to download`;
+  }
+}
+
+// ─────────────────────────────────────────────────────── GENERAL FILE GENERATION
+
+function isAllGeneralDefaults() {
+  return GENERAL_GROUPS.every(g =>
+    g.params.every(p => {
+      const { valid, value } = validateConfigValue(genValues[p.name], p.type, p.min, p.max);
+      if (!valid) return false;
+      return value === p.def;
+    })
+  );
+}
+
+function generateGeneralContent() {
+  const date = new Date().toLocaleDateString('en-US', {
+    year: 'numeric', month: 'long', day: 'numeric',
+  });
+
+  let out = '';
+  out += `// =====================================================\n`;
+  out += `// CALIBRATION CONFIGURATION - USER OVERRIDE\n`;
+  out += `// Generated by Mini Bowling Config Tool\n`;
+  out += `// Generated: ${date}\n`;
+  out += `//\n`;
+  out += `// INSTRUCTIONS:\n`;
+  out += `//   1. Copy this file into your sketch directory:\n`;
+  out += `//\n`;
+  out += `//        Everything/general_config.user.h\n`;
+  out += `//      and/or\n`;
+  out += `//        Master_Test/general_config.user.h\n`;
+  out += `//\n`;
+  out += `//   2. The sketch uses this file automatically via:\n`;
+  out += `//        #if __has_include("general_config.user.h")\n`;
+  out += `//          #include "general_config.user.h"\n`;
+  out += `//        #else\n`;
+  out += `//          #include "general_config.h"\n`;
+  out += `//        #endif\n`;
+  out += `//      This file takes priority; general_config.h is ignored.\n`;
+  out += `// =====================================================\n`;
+  out += `\n`;
+  out += `#ifndef GENERAL_CONFIG_H\n`;
+  out += `#define GENERAL_CONFIG_H\n`;
+
+  GENERAL_GROUPS.forEach(g => {
+    const maxLen = g.params.reduce((m, p) => Math.max(m, p.name.length), 0);
+    const pad    = Math.max(maxLen + 4, 24);
+
+    out += `\n`;
+    out += `// =====================================================\n`;
+    out += `// ${g.title.toUpperCase()}\n`;
+    out += `// =====================================================\n`;
+
+    g.params.forEach(p => {
+      const { valid, value } = validateConfigValue(genValues[p.name], p.type, p.min, p.max);
+      const v = valid ? value : genValues[p.name];
+      out += `#define ${padRight(p.name, pad)}${v}\n`;
+    });
+  });
+
+  out += `\n`;
+  out += `#endif // GENERAL_CONFIG_H\n`;
+  return out;
+}
+
+function downloadGeneralConfig() {
+  _downloadingTab = 'general';
+  updateModalsForTab('general');
+  if (isAllGeneralDefaults()) { showDefaultsModal(); return; }
+  doDownloadGeneral();
+  showDirectionsModal();
+}
+
+function doDownloadGeneral() {
+  const content = generateGeneralContent();
+  const blob    = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url     = URL.createObjectURL(blob);
+  const a       = document.createElement('a');
+  a.href        = url;
+  a.download    = 'general_config.user.h';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ─────────────────────────────────────────────────────── GENERAL FILE LOAD
+
+function triggerGeneralFileLoad() {
+  document.getElementById('genConfigFileInput').click();
+}
+
+function handleGeneralFileLoad(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const count = parseGeneralFile(e.target.result);
+    showLoadBanner(count, file.name, 'general');
+    renderGeneral();
+    updateGeneralStatus();
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+function parseGeneralFile(text) {
+  GENERAL_GROUPS.forEach(g => g.params.forEach(p => { genValues[p.name] = p.def; }));
+
+  let loaded = 0;
+  text.split('\n').forEach(line => {
+    const t = line.trim();
+    if (!t || t.startsWith('//') || t.startsWith('*') || t.startsWith('/*')) return;
+    // Match: #define NAME VALUE  (handles negative numbers and floats)
+    const m = t.match(/^#define\s+(\w+)\s+(-?[\d.]+)/);
+    if (!m) return;
+    const [, name, raw] = m;
+    if (!GENERAL_MAP.has(name)) return;
+    const { param } = GENERAL_MAP.get(name);
+    const { valid, value } = validateConfigValue(raw, param.type, param.min, param.max);
+    if (!valid) return;
+    genValues[name] = value;
+    loaded++;
+  });
+
+  return loaded;
+}
+
+// ─────────────────────────────────────────────────────── GENERAL INSTRUCTIONS
+
+let genInstrOpen = true;
+
+function toggleGenInstructions() {
+  genInstrOpen = !genInstrOpen;
+  document.getElementById('genInstructionsBody').classList.toggle('collapsed', !genInstrOpen);
+  document.getElementById('genChevron').classList.toggle('open', genInstrOpen);
+}
+
+// ─────────────────────────────────────────────────────── PIN CONFIG VALIDATION
+
+/**
+ * Validate a raw pin input string.
+ * @param {string} raw
+ * @param {boolean} isLogical - true for ScoreMore logical channels
+ * @returns {{ valid: boolean, value: string }}
+ */
+function validatePin(raw, isLogical) {
+  const s = raw.trim();
+  if (s === '') return { valid: false, value: '' };
+
+  if (isLogical) {
+    if (/^\d+$/.test(s)) {
+      const n = parseInt(s, 10);
+      if (n >= 0 && n <= 999) return { valid: true, value: String(n) };
+    }
+    return { valid: false, value: s };
+  }
+
+  // Physical pin: 0-53 (digital) or A0-A15 (analog)
+  if (/^[Aa]\d{1,2}$/.test(s)) {
+    const n = parseInt(s.slice(1), 10);
+    if (n >= 0 && n <= 15) return { valid: true, value: 'A' + n };
+    return { valid: false, value: s };
+  }
+  if (/^\d+$/.test(s)) {
+    const n = parseInt(s, 10);
+    if (n >= 0 && n <= 53) return { valid: true, value: String(n) };
+    return { valid: false, value: s };
+  }
+  return { valid: false, value: s };
+}
+
+// ─────────────────────────────────────────────────────── CONFLICT DETECTION
+
+function detectConflicts() {
+  const physMap = new Map();
+  const smMap   = new Map();
+
+  PIN_GROUPS.forEach(g => {
+    const logical = !g.physical;
+    g.pins.forEach(p => {
+      if (p.optional && !optEnabled[p.name]) return;
+      const { valid, value } = validatePin(values[p.name], logical);
+      if (!valid) return;
+      const map = logical ? smMap : physMap;
+      if (!map.has(value)) map.set(value, []);
+      map.get(value).push(p.name);
+    });
+  });
+
+  const filter = m => new Map([...m].filter(([, names]) => names.length > 1));
+  return { physConflicts: filter(physMap), smConflicts: filter(smMap) };
+}
+
+let _conflicts = { physConflicts: new Map(), smConflicts: new Map() };
+
+function refreshConflicts() {
+  _conflicts = detectConflicts();
+}
+
+function pinIsConflict(pinName, group) {
+  const map = group.physical ? _conflicts.physConflicts : _conflicts.smConflicts;
+  const logical = !group.physical;
+  const { valid, value } = validatePin(values[pinName], logical);
+  if (!valid) return false;
+  const names = map.get(value);
+  return names ? names.includes(pinName) : false;
+}
+
+// ─────────────────────────────────────────────────────── PIN RENDER
+
+function render() {
+  const grid = document.getElementById('groupsGrid');
+  grid.innerHTML = '';
+  refreshConflicts();
+
+  PIN_GROUPS.forEach(g => {
+    const card = document.createElement('div');
+    card.className = 'card' + (g.full ? ' group-full' : '');
+
+    const header = document.createElement('div');
+    header.className = 'card-header';
+    header.innerHTML =
+      `<div class="card-title"><div class="card-icon">${g.icon || ''}</div>${g.title}</div>` +
+      `<div class="card-subtitle">${g.desc}</div>`;
+    card.appendChild(header);
+
+    const body = document.createElement('div');
+    body.className = 'card-body';
+
+    if (g.note) {
+      const note = document.createElement('div');
+      note.className = 'group-note';
+      note.textContent = g.note;
+      body.appendChild(note);
+    }
+
+    const pinContainer = document.createElement('div');
+    if (g.full) pinContainer.className = 'pins-2col';
+    body.appendChild(pinContainer);
+
+    g.pins.forEach(p => pinContainer.appendChild(buildPinRow(p, g)));
+    card.appendChild(body);
+    grid.appendChild(card);
+  });
+}
+
+function buildPinRow(pin, group) {
+  const logical  = !group.physical;
+  const disabled = pin.optional && !optEnabled[pin.name];
+  const { valid } = validatePin(values[pin.name], logical);
+  const modified  = !disabled && values[pin.name] !== pin.def;
+  const conflict  = !disabled && valid && pinIsConflict(pin.name, group);
+
+  let rowState = '';
+  if (disabled)       rowState = 'state-disabled';
+  else if (!valid)    rowState = 'state-invalid';
+  else if (conflict)  rowState = 'state-conflict';
+  else if (modified)  rowState = 'state-modified';
+
+  let inputClass = 'pin-input';
+  if (!disabled && !valid)        inputClass += ' input-invalid';
+  else if (!disabled && conflict) inputClass += ' input-conflict';
+  else if (!disabled && modified) inputClass += ' input-modified';
+
+  let badge = '';
+  if (!disabled && !valid)        badge = '<span class="pin-badge invalid">invalid</span>';
+  else if (!disabled && conflict) badge = '<span class="pin-badge conflict">conflict</span>';
+  else if (!disabled && modified) badge = '<span class="pin-badge modified">modified</span>';
+
+  const title = logical
+    ? 'Logical channel number (any integer 0–999)'
+    : 'Arduino Mega pin: 0–53 for digital, A0–A15 for analog';
+
+  const row = document.createElement('div');
+  row.className = `pin-row ${rowState}`;
+  row.id = `row-${pin.name}`;
+
+  const right = pin.optional
+    ? `<div class="pin-right">
+         <span class="pin-default">def:&nbsp;${pin.def}</span>
+         ${badge}
+         <input type="text" class="${inputClass}" id="inp-${pin.name}"
+                value="${values[pin.name]}" ${disabled ? 'disabled' : ''}
+                placeholder="${pin.def}" title="${title}"
+                oninput="onInput('${pin.name}',this.value)">
+         <div class="opt-wrap">
+           <label class="toggle" title="Enable this optional pin">
+             <input type="checkbox" id="opt-${pin.name}"
+                    ${optEnabled[pin.name] ? 'checked' : ''}
+                    onchange="onOptToggle('${pin.name}',this.checked)">
+             <div class="toggle-track"></div>
+             <div class="toggle-thumb"></div>
+           </label>
+           <span class="opt-label">enable</span>
+         </div>
+       </div>`
+    : `<div class="pin-right">
+         <span class="pin-default">def:&nbsp;${pin.def}</span>
+         ${badge}
+         <input type="text" class="${inputClass}" id="inp-${pin.name}"
+                value="${values[pin.name]}"
+                placeholder="${pin.def}" title="${title}"
+                oninput="onInput('${pin.name}',this.value)">
+       </div>`;
+
+  row.innerHTML =
+    `<div class="pin-left">
+       <div class="pin-name mono">${pin.name}</div>
+       <div class="pin-desc">${pin.desc}</div>
+     </div>` + right;
+
+  return row;
+}
+
+function updateRow(pin, group) {
+  const row = document.getElementById(`row-${pin.name}`);
+  if (!row) return;
+
+  const logical  = !group.physical;
+  const disabled = pin.optional && !optEnabled[pin.name];
+  const { valid } = validatePin(values[pin.name], logical);
+  const modified  = !disabled && values[pin.name] !== pin.def;
+  const conflict  = !disabled && valid && pinIsConflict(pin.name, group);
+
+  let rowState = '';
+  if (disabled)       rowState = 'state-disabled';
+  else if (!valid)    rowState = 'state-invalid';
+  else if (conflict)  rowState = 'state-conflict';
+  else if (modified)  rowState = 'state-modified';
+  row.className = `pin-row ${rowState}`;
+
+  const inp = document.getElementById(`inp-${pin.name}`);
+  if (inp) {
+    let inputClass = 'pin-input';
+    if (!disabled && !valid)        inputClass += ' input-invalid';
+    else if (!disabled && conflict) inputClass += ' input-conflict';
+    else if (!disabled && modified) inputClass += ' input-modified';
+    inp.className = inputClass;
+    inp.disabled  = disabled;
+    if (document.activeElement !== inp) inp.value = values[pin.name];
+  }
+
+  row.querySelector('.pin-badge')?.remove();
+  if (!disabled && inp) {
+    let badgeHtml = '';
+    if (!valid)        badgeHtml = '<span class="pin-badge invalid">invalid</span>';
+    else if (conflict) badgeHtml = '<span class="pin-badge conflict">conflict</span>';
+    else if (modified) badgeHtml = '<span class="pin-badge modified">modified</span>';
+    if (badgeHtml) inp.insertAdjacentHTML('beforebegin', badgeHtml);
+  }
+}
+
+// ─────────────────────────────────────────────────────── PIN EVENTS
+
+function onInput(pinName, rawValue) {
+  values[pinName] = rawValue;
+  refreshConflicts();
+  PIN_GROUPS.forEach(g => { if (g.physical) g.pins.forEach(p => updateRow(p, g)); });
+  updateStatus();
+}
+
+function onOptToggle(pinName, enabled) {
+  optEnabled[pinName] = enabled;
+  const { pin, group } = PIN_MAP.get(pinName);
+  refreshConflicts();
+  updateRow(pin, group);
+  group.pins.forEach(p => { if (p.name !== pinName) updateRow(p, group); });
+  updateStatus();
+}
+
+function resetToDefaults() {
+  if (!confirm('Reset all pin assignments to their default values?')) return;
+  PIN_GROUPS.forEach(g => g.pins.forEach(p => {
+    values[p.name] = p.def;
+    if (p.optional) optEnabled[p.name] = false;
+  }));
+  render();
+  updateStatus();
+}
+
+// ─────────────────────────────────────────────────────── PIN STATUS
+
+function updateStatus() {
+  refreshConflicts();
+
+  let nModified = 0, nConflicts = 0, nInvalid = 0;
+
+  PIN_GROUPS.forEach(g => {
+    const logical = !g.physical;
+    const conflictMap = g.physical ? _conflicts.physConflicts : _conflicts.smConflicts;
+    g.pins.forEach(p => {
+      if (p.optional && !optEnabled[p.name]) return;
+      const { valid, value } = validatePin(values[p.name], logical);
+      if (!valid) { nInvalid++; return; }
+      if (values[p.name] !== p.def) nModified++;
+      const names = conflictMap.get(value);
+      if (names && names.includes(p.name)) nConflicts++;
+    });
+  });
+
+  document.getElementById('statModified').textContent  = nModified;
+  document.getElementById('statConflicts').textContent = nConflicts;
+  document.getElementById('statInvalid').textContent   = nInvalid;
+
+  const hasErrors = nInvalid > 0 || nConflicts > 0;
+  document.getElementById('downloadBtn').disabled = hasErrors;
+
+  const indicator = document.getElementById('validIndicator');
+  if (hasErrors) {
+    indicator.className = 'valid-indicator error';
+    indicator.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M4 4l8 8M12 4l-8 8" stroke-linecap="round"/>
+      </svg>
+      Fix errors to download`;
+  } else {
+    indicator.className = 'valid-indicator ok';
+    indicator.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M3 8l4 4 6-6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Ready to download`;
+  }
+
+  updateConflictAlert();
+  updateBoard();
+}
+
+function updateConflictAlert() {
+  const messages = [];
+
+  _conflicts.physConflicts.forEach((names, value) => {
+    messages.push(`Physical pin ${value} is assigned to: ${names.join(', ')}`);
+  });
+  _conflicts.smConflicts.forEach((names, value) => {
+    messages.push(`ScoreMore channel ${value} is assigned to: ${names.join(', ')}`);
+  });
+
+  const alert = document.getElementById('conflictAlert');
+  const list  = document.getElementById('conflictList');
+
+  if (messages.length > 0) {
+    list.innerHTML = messages.map(m => `<li>&#x25B8; ${m}</li>`).join('');
+    alert.classList.add('visible');
+  } else {
+    alert.classList.remove('visible');
+  }
+}
+
+// ─────────────────────────────────────────────────────── BOARD DIAGRAM
+
+function buildBoardDiagram() {
+  const NS = 'http://www.w3.org/2000/svg';
+  const mk = (tag, attrs) => {
+    const e = document.createElementNS(NS, tag);
+    if (attrs) Object.entries(attrs).forEach(([k, v]) => e.setAttribute(k, v));
+    return e;
+  };
+  const txt = (s, attrs) => { const e = mk('text', attrs); e.textContent = s; return e; };
+
+  const svg = mk('svg', { viewBox: `0 0 ${BD.W} ${BD.H}`, preserveAspectRatio: 'xMidYMid meet' });
+
+  svg.appendChild(mk('rect', { x:0, y:0, width:BD.W, height:BD.H, rx:10,
+    fill:'#1a5c32', stroke:'#0f3d1f', 'stroke-width':2 }));
+
+  svg.appendChild(mk('rect', { x:0, y:BD.H/2-18, width:14, height:36, rx:3,
+    fill:'#888', stroke:'#555', 'stroke-width':1.5 }));
+
+  svg.appendChild(mk('rect', { x:130, y:115, width:240, height:160, rx:4,
+    fill:'#111', stroke:'#333', 'stroke-width':1 }));
+  svg.appendChild(txt('Arduino Mega 2560', { x:250, y:202,
+    'text-anchor':'middle', 'font-size':'11', fill:'#555',
+    'font-family':'monospace', 'pointer-events':'none' }));
+
+  const sl = { 'text-anchor':'middle', 'font-size':'8', fill:'#4d9e6f',
+               'font-family':'sans-serif', 'font-weight':'600', 'pointer-events':'none' };
+  svg.appendChild(txt('D0 – D13',  Object.assign({ x:182, y:62 }, sl)));
+  svg.appendChild(txt('D14 – D21', Object.assign({ x:442, y:62 }, sl)));
+  svg.appendChild(txt('D22 – D53', Object.assign({ x:544, y:62 }, sl)));
+  svg.appendChild(txt('PWR',       Object.assign({ x:122, y:362 }, sl)));
+  svg.appendChild(txt('A0 – A15',  Object.assign({ x:402, y:362 }, sl)));
+
+  const ncPos = [
+    { x: BD.D0X + 14*BD.P, y: BD.TY },
+    { x: BD.D0X + 15*BD.P, y: BD.TY },
+    ...Array.from({ length:8 }, (_, i) => ({ x: BD.PX + i*BD.P, y: BD.BY })),
+  ];
+  ncPos.forEach(({ x, y }) => {
+    svg.appendChild(mk('circle', { cx:x, cy:y, r:5.5, fill:'#2d7a50', stroke:'#1a5c32', 'stroke-width':1 }));
+    svg.appendChild(mk('circle', { cx:x, cy:y, r:2,   fill:'#0d2b18' }));
+  });
+
+  Object.entries(BOARD_PIN_POS).forEach(([pinVal, { x, y }]) => {
+    const g = document.createElementNS(NS, 'g');
+    g.id = 'bp-' + pinVal;
+    g.classList.add('bpg');
+
+    g.appendChild(mk('circle', { class:'bpc', cx:x, cy:y, r:5.5,
+      fill:'#6b7280', stroke:'#4b5563', 'stroke-width':1 }));
+    g.appendChild(mk('circle', { class:'bph', cx:x, cy:y, r:2, fill:'#111' }));
+
+    const num = parseInt(pinVal);
+    let lx, ly, anchor;
+    if (!isNaN(num) && num >= 22) {
+      if (num % 2 === 0) { lx = x - 8; ly = y + 3; anchor = 'end';   }
+      else               { lx = x + 8; ly = y + 3; anchor = 'start'; }
+    } else if (pinVal.startsWith('A')) {
+      lx = x;  ly = y - 9;  anchor = 'middle';
+    } else {
+      lx = x;  ly = y + 14; anchor = 'middle';
+    }
+    g.appendChild(txt(pinVal, { class:'bpl', x:lx, y:ly, 'text-anchor':anchor,
+      'font-size':'6.5', fill:'#ffffff', 'font-family':'monospace', 'pointer-events':'none' }));
+
+    svg.appendChild(g);
+  });
+
+  const container = document.getElementById('boardDiagram');
+  container.innerHTML = '';
+  container.appendChild(svg);
+
+  svg.addEventListener('mousemove', e => {
+    const tip = document.getElementById('boardTooltip');
+    const g = e.target.closest('.bpg');
+    if (!g || !g.dataset.label) { tip.style.display = 'none'; return; }
+    tip.textContent = g.dataset.label;
+    tip.style.display = 'block';
+    tip.style.left = (e.clientX + 14) + 'px';
+    tip.style.top  = (e.clientY  -  6) + 'px';
+  });
+  svg.addEventListener('mouseleave', () => {
+    const tip = document.getElementById('boardTooltip');
+    if (tip) tip.style.display = 'none';
+  });
+
+  buildBoardLegend();
+  updateBoard();
+}
+
+function buildBoardLegend() {
+  const container = document.getElementById('boardLegend');
+  const groups = PIN_GROUPS.filter(g => g.physical);
+  container.innerHTML =
+    groups.map(g =>
+      `<div class="board-legend-item">` +
+      `<span class="board-legend-dot" style="background:${GROUP_COLORS[g.id] || '#60a5fa'}"></span>` +
+      `<span>${g.title}</span></div>`
+    ).join('') +
+    `<div class="board-legend-item"><span class="board-legend-dot" style="background:#ef4444;border:1px solid #b91c1c"></span><span>Conflict</span></div>` +
+    `<div class="board-legend-item"><span class="board-legend-dot" style="background:#6b7280"></span><span>Unused</span></div>`;
+}
+
+function updateBoard() {
+  document.querySelectorAll('.bpg').forEach(g => {
+    g.querySelector('.bpc').setAttribute('fill',   '#6b7280');
+    g.querySelector('.bpc').setAttribute('stroke', '#4b5563');
+    g.querySelector('.bph').setAttribute('fill',   '#111');
+    const lbl = g.querySelector('.bpl');
+    if (lbl) lbl.setAttribute('fill', '#ffffff');
+    delete g.dataset.label;
+  });
+
+  PIN_GROUPS.forEach(group => {
+    if (!group.physical) return;
+    group.pins.forEach(pin => {
+      if (pin.optional && !optEnabled[pin.name]) return;
+      const { valid, value } = validatePin(values[pin.name], false);
+      if (!valid) return;
+      const el = document.getElementById('bp-' + value);
+      if (!el) return;
+      const conflict = pinIsConflict(pin.name, group);
+      const color = conflict ? '#ef4444' : (GROUP_COLORS[group.id] || '#60a5fa');
+      el.querySelector('.bpc').setAttribute('fill',   color);
+      el.querySelector('.bpc').setAttribute('stroke', conflict ? '#b91c1c' : color);
+      el.querySelector('.bph').setAttribute('fill',   'rgba(0,0,0,0.35)');
+      const lbl = el.querySelector('.bpl');
+      if (lbl) lbl.setAttribute('fill', '#ffffff');
+      el.dataset.label = pin.name + '  ·  ' + group.title;
+    });
+  });
+}
+
+// ─────────────────────────────────────────────────────── PIN INSTRUCTIONS
+
+let instrOpen = true;
+
+function toggleInstructions() {
+  instrOpen = !instrOpen;
+  document.getElementById('instructionsBody').classList.toggle('collapsed', !instrOpen);
+  document.getElementById('chevron').classList.toggle('open', instrOpen);
+}
+
+// ─────────────────────────────────────────────────────── PIN FILE GENERATION
+
+function padRight(str, len) {
+  return str.padEnd(len, ' ');
+}
+
+function generateFileContent() {
+  const date = new Date().toLocaleDateString('en-US', {
+    year: 'numeric', month: 'long', day: 'numeric',
+  });
+
+  let out = '';
+  out += `// =====================================================\n`;
+  out += `// PIN CONFIGURATION - USER OVERRIDE\n`;
+  out += `// Generated by Mini Bowling Config Tool\n`;
+  out += `// Generated: ${date}\n`;
+  out += `//\n`;
+  out += `// INSTRUCTIONS:\n`;
+  out += `//   1. Copy this file into your sketch directory:\n`;
+  out += `//\n`;
+  out += `//        Everything/pin_config.user.h\n`;
+  out += `//      and/or\n`;
+  out += `//        Master_Test/pin_config.user.h\n`;
+  out += `//\n`;
+  out += `//   2. The sketch uses this file automatically via:\n`;
+  out += `//        #if __has_include("pin_config.user.h")\n`;
+  out += `//          #include "pin_config.user.h"\n`;
+  out += `//        #else\n`;
+  out += `//          #include "pin_config.h"\n`;
+  out += `//        #endif\n`;
+  out += `//      This file takes priority; pin_config.h is ignored.\n`;
+  out += `// =====================================================\n`;
+  out += `\n`;
+  out += `#ifndef PIN_CONFIG_H\n`;
+  out += `#define PIN_CONFIG_H\n`;
+
+  PIN_GROUPS.forEach(g => {
+    const logical = !g.physical;
+
+    const activePins    = g.pins.filter(p => !p.optional || optEnabled[p.name]);
+    const commentedPins = g.pins.filter(p =>  p.optional && !optEnabled[p.name]);
+
+    const maxLen = activePins.reduce((m, p) => Math.max(m, p.name.length), 0);
+    const pad    = Math.max(maxLen + 4, 16);
+
+    out += `\n`;
+    out += `// =====================================================\n`;
+    out += `// ${g.title.toUpperCase()}\n`;
+    out += `// =====================================================\n`;
+
+    activePins.forEach(p => {
+      const { valid, value } = validatePin(values[p.name], logical);
+      out += `#define ${padRight(p.name, pad)}${valid ? value : values[p.name]}\n`;
+    });
+
+    commentedPins.forEach(p => {
+      out += `// #define ${padRight(p.name, pad)}${p.def}  // Uncomment to enable\n`;
+    });
+  });
+
+  out += `\n`;
+  out += `#endif // PIN_CONFIG_H\n`;
+  return out;
+}
+
+function isAllDefaults() {
+  return PIN_GROUPS.every(g =>
+    g.pins.every(p => {
+      if (p.optional) return !optEnabled[p.name];
+      return String(values[p.name]) === String(p.def);
+    })
+  );
+}
+
+function downloadConfig() {
+  _downloadingTab = 'pins';
+  updateModalsForTab('pins');
+  if (isAllDefaults()) { showDefaultsModal(); return; }
+  doDownload();
+  showDirectionsModal();
+}
+
+function doDownload() {
+  const content = generateFileContent();
+  const blob    = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url     = URL.createObjectURL(blob);
+  const a       = document.createElement('a');
+  a.href        = url;
+  a.download    = 'pin_config.user.h';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ─────────────────────────────────────────────────────── MODAL HELPERS
+
+function updateModalsForTab(tab) {
+  const isGen = tab === 'general';
+  const uf = isGen ? 'general_config.user.h' : 'pin_config.user.h';
+  const sf = isGen ? 'general_config.h'      : 'pin_config.h';
+
+  document.getElementById('defaults-modal-body').innerHTML =
+    `<p>Every value matches <code>${sf}</code> exactly — you don't need a` +
+    ` <code>${uf}</code> override file. The sketch will use the defaults automatically.</p>` +
+    `<p class="modal-sub">If you previously created a <code>${uf}</code>, you can` +
+    ` delete it so the sketch falls back to <code>${sf}</code> on its own.</p>`;
+
+  document.getElementById('directions-modal-body').innerHTML =
+    `<p>Your <code>${uf}</code> file has been saved. Here's how to use it:</p>` +
+    `<ol style="margin:0 0 10px;padding-left:20px;font-size:13px;color:var(--text-muted);line-height:1.8">` +
+    `<li>Locate the downloaded <code>${uf}</code> file (usually in your Downloads folder).</li>` +
+    `<li>Copy it into your sketch folder — either or both of:` +
+    `<div style="margin:6px 0 2px;display:flex;flex-direction:column;gap:4px">` +
+    `<code style="background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:3px 8px;font-size:12px">Everything/${uf}</code>` +
+    `<code style="background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:3px 8px;font-size:12px">Master_Test/${uf}</code>` +
+    `</div></li>` +
+    `<li>Open the sketch in the Arduino IDE and upload to the Arduino — no other changes needed.</li>` +
+    `</ol>` +
+    `<p class="modal-sub">The sketch automatically uses this file when it is present in the sketch folder.</p>`;
+}
+
+function showDefaultsModal() {
+  document.getElementById('defaultsModal').style.display = 'flex';
+}
+
+function closeDefaultsModal() {
+  document.getElementById('defaultsModal').style.display = 'none';
+}
+
+function showDirectionsModal() {
+  document.getElementById('directionsModal').style.display = 'flex';
+}
+
+function closeDirectionsModal() {
+  document.getElementById('directionsModal').style.display = 'none';
+}
+
+function downloadAnywayFromModal() {
+  closeDefaultsModal();
+  if (_downloadingTab === 'general') doDownloadGeneral(); else doDownload();
+  showDirectionsModal();
+}
+
+// ─────────────────────────────────────────────────────── PIN FILE LOAD
+
+function triggerFileLoad() {
+  document.getElementById('configFileInput').click();
+}
+
+function handleFileLoad(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const count = parseConfigFile(e.target.result);
+    showLoadBanner(count, file.name, 'pins');
+    render();
+    updateStatus();
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+function parseConfigFile(text) {
+  PIN_GROUPS.forEach(g => g.pins.forEach(p => {
+    values[p.name] = p.def;
+    if (p.optional) optEnabled[p.name] = false;
+  }));
+
+  let loaded = 0;
+  text.split('\n').forEach(line => {
+    const t = line.trim();
+    if (!t || t.startsWith('//') || t.startsWith('*') || t.startsWith('/*')) return;
+    const m = t.match(/^#define\s+(\w+)\s+([A-Za-z0-9]+)/);
+    if (!m) return;
+    const [, name, raw] = m;
+    if (!PIN_MAP.has(name)) return;
+    const { pin, group } = PIN_MAP.get(name);
+    const { valid, value } = validatePin(raw, !group.physical);
+    if (!valid) return;
+    values[name] = value;
+    if (pin.optional) optEnabled[name] = true;
+    loaded++;
+  });
+
+  return loaded;
+}
+
+function showLoadBanner(count, filename, type) {
+  const el = document.getElementById('loadBanner');
+  const label = type === 'general' ? 'calibration value' : 'pin assignment';
+  if (count > 0) {
+    el.className = 'load-banner load-banner-ok visible';
+    el.innerHTML = `<strong>${count} ${label}${count !== 1 ? 's' : ''} loaded</strong>`
+                 + ` from <code>${filename}</code>`;
+  } else {
+    el.className = 'load-banner load-banner-warn visible';
+    el.innerHTML = `No recognised ${label}s found in <code>${filename}</code>`;
+  }
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('visible'), 6000);
+}
+
+// ─────────────────────────────────────────────────────── INIT
+
+renderGeneral();
+updateGeneralStatus();
+buildBoardDiagram();
+render();
+updateStatus();
+switchTab('general');
+</script>
+
+<div class="board-tooltip" id="boardTooltip"></div>
+<div class="load-banner" id="loadBanner"></div>
+
+<div class="modal-backdrop" id="defaultsModal" style="display:none"
+     onclick="if(event.target===this)closeDefaultsModal()">
+  <div class="modal-box">
+    <div class="modal-icon">✓</div>
+    <h3>You're using all defaults</h3>
+    <div id="defaults-modal-body"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeDefaultsModal()">Got it</button>
+      <button class="btn btn-primary" onclick="downloadAnywayFromModal()">Download anyway</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="directionsModal" style="display:none"
+     onclick="if(event.target===this)closeDirectionsModal()">
+  <div class="modal-box">
+    <div class="modal-icon">⬇</div>
+    <h3>File downloaded!</h3>
+    <div id="directions-modal-body"></div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="closeDirectionsModal()">Got it</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>
