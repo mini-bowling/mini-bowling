@@ -1209,7 +1209,20 @@ void updateSweepTween(){
 void waitSweepDone(unsigned long timeoutMs){
   unsigned long start=millis();
   while(sweepAnimating && (millis()-start)<timeoutMs){
-    updateSweepTween(); delay(1);
+	// Keep background mechanisms alive while sweep motion completes.
+    // This prevents turret/conveyor catch logic from stalling during
+    // long strike sweep animations.
+    runTurret();
+    updateConveyorOutput();
+    updateBallReturnDoor();
+    updateSweepTween();
+    laneUpdate();
+    if(millis()-prevScoreMillis>=SCORE_INTERVAL){
+      prevScoreMillis=millis();
+      checkSerial();
+      checkInputChanges();
+    }
+    delay(1);
   }
   if(sweepAnimating){
     sweepCurL=sweepTargetL; sweepCurR=sweepTargetR;
