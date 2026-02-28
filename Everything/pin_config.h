@@ -18,9 +18,9 @@
 #endif
 // Uncomment STEPPER_ENABLE_PIN if stepper uses an enable pin
 // (required for user reset button w/ maintenance mode)
-#ifndef STEPPER_ENABLE_PIN
-#define STEPPER_ENABLE_PIN  49
-#endif
+//#ifndef STEPPER_ENABLE_PIN
+//#define STEPPER_ENABLE_PIN  49
+//#endif
 
 // =====================================================
 // RELAY PIN
