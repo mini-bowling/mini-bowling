@@ -767,8 +767,8 @@ void runTurret(){
   }
   if(irStableState==HIGH) pinEdgeArmed=true;
 
-  // Queue pin hits whenever we're not in dwell/hold AND not paused (NEW)
-  if(!pauseMode && !releaseDwellActive && !conesFullHold){
+  // Queue pin hits whenever we're not in dwell/hold/release-transfer AND not paused
+  if(!pauseMode && !releaseDwellActive && !conesFullHold && !(turretReleaseRequested && (targetPos==Pin10ReleasePos()))){
     if(pinEdgeArmed && irStableState==LOW){
       queuedPinEvents++;         // record that one more pin has arrived
       pinEdgeArmed = false;      // wait for beam to clear before next
@@ -849,7 +849,11 @@ void onPinDetected(){
       return;
     }
     if( (turretReleaseRequested || (deckIsUp && backgroundRefillRequested)) ){
-      turretReleaseRequested=true; goTo(Pin10ReleasePos()); return;
+       turretReleaseRequested=true;
+      queuedPinEvents=0;    // reject extra pin edges while releasing the 10th
+      pinEdgeArmed=false;
+      goTo(Pin10ReleasePos());
+      return;
     }
     pinEdgeArmed=false; return;
   }
@@ -954,6 +958,10 @@ void updateConveyorOutput(){
 
   if(conveyorLockedByDwell){
     if(millis()-releaseDwellStart<RELEASE_FEED_ASSIST_MS) ConveyorOn();  else ConveyorOff();
+    return;
+  }
+    if(turretReleaseRequested && !releaseDwellActive && (targetPos==Pin10ReleasePos())){
+    ConveyorOff();
     return;
   }
   if(suspendConveyorUntilHomeDone){ ConveyorOff(); return; }

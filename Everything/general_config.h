@@ -125,16 +125,16 @@
 // =====================================================
 // Defaults are listed on settings that are commonly adjusted.
 #ifndef TURRET_NORMAL_MAXSPEED
-#define TURRET_NORMAL_MAXSPEED  650.0
+#define TURRET_NORMAL_MAXSPEED  800.0
 #endif
 #ifndef TURRET_NORMAL_ACCEL
-#define TURRET_NORMAL_ACCEL     3000.0
+#define TURRET_NORMAL_ACCEL     3800.0
 #endif
 #ifndef TURRET_SPRING_MAXSPEED
-#define TURRET_SPRING_MAXSPEED  300.0
+#define TURRET_SPRING_MAXSPEED  380.0
 #endif
 #ifndef TURRET_SPRING_ACCEL
-#define TURRET_SPRING_ACCEL     1500.0
+#define TURRET_SPRING_ACCEL     2000.0
 #endif
 
 // Home position adjuster (fine-tune after homing).
@@ -189,7 +189,7 @@
 #define PIN_POS_9       -1467
 #endif
 #ifndef PIN_POS_10
-#define PIN_POS_10      -1600
+#define PIN_POS_10      -1580
 #endif
 
 // =====================================================
