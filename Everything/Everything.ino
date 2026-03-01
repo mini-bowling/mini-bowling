@@ -66,6 +66,7 @@ unsigned long ballCometStartMs=0, ballCometLastFrame=0;
 void ledsBegin(); void deckAll(uint32_t col); void laneAll(uint32_t col); void ledsShowAll(); void laneShowOnly();
 void laneUpdate(); void startStrikeWipe(); void startStrikeFlash(); void startBallCometImmediate();
 void endAllLaneAnimsToWhite(); void startupWipeWhiteQuick();
+void handleConfirmedBall(unsigned long now);
 
 // NEW: frame LED helpers
 void updateFrameLEDs();
@@ -104,6 +105,7 @@ Servo LeftRaiseServo, RightRaiseServo, SlideServo, ScissorsServo, LeftSweepServo
 
 // ======================= PAUSE MODE =======================
 bool pauseMode = false;
+bool queuedBallDuringSet = false;
 unsigned long lastBallActivityMs = 0;
 
 // Track sweep pose so we can reliably check "sweep is up"
@@ -412,33 +414,17 @@ void loop(){
   if(rawBall==LOW && ballPrev==HIGH){ ballPending=true; ballLowStartUs=micros(); }
   if(ballPending){
     if(rawBall==LOW){
-      if((micros()-ballLowStartUs)>=BALL_LOW_CONFIRM_US && waitingForBall && ballRearmed){
+   if((micros()-ballLowStartUs)>=BALL_LOW_CONFIRM_US && ballRearmed){
 
-        // If paused and a ball arrives anyway, immediately resume (fail-safe)
-        if(pauseMode){
-          exitPauseMode();
-        }
-
-        waitingForBall=false;
-        lastBallActivityMs = millis();   // NEW: refresh idle timer on ball
-        scoreWindowActive=true;
-
-        scoremoreBallPulse_begin();
-
-        startBallCometImmediate();
-        onBallThrownDoorClose();
-
-        lastPinCatchMs = millis();
-
-        if (inFillBall) {
-          stepIndex = 22;
-          fillBallShotInProgress = true;
-        } else {
-          stepIndex = (throwCount==1) ? 1 : 22;
-        }
-
-        if(throwCount==1){ forceConveyorForBallReturn=true; }
-        prevStepMillis=now; ballRearmed=false; lastBallHighMs=millis(); ballPending=false;
+        if(waitingForBall && ballRearmed){
+          handleConfirmedBall(now);
+          ballRearmed=false; lastBallHighMs=millis(); ballPending=false;
+        }else if(ballRearmed && stepIndex>=32 && stepIndex<=36){
+          // Accept a throw during the post-set finish sequence and
+          // fire it as soon as the machine returns to ready state.
+          queuedBallDuringSet=true;
+          ballRearmed=false; lastBallHighMs=millis(); ballPending=false;
+        }   
       }
     }else{ ballPending=false; }
   }
@@ -456,6 +442,34 @@ void loop(){
 }
 
 // ======================= SEQUENCER =======================
+void handleConfirmedBall(unsigned long now){
+  // If paused and a ball arrives anyway, immediately resume (fail-safe)
+  if(pauseMode){
+    exitPauseMode();
+  }
+
+  waitingForBall=false;
+  lastBallActivityMs = millis();    // NEW: refresh idle timer on ball
+  scoreWindowActive=true;
+
+  scoremoreBallPulse_begin();
+
+  startBallCometImmediate();
+  onBallThrownDoorClose();
+
+  lastPinCatchMs = millis();
+
+  if (inFillBall) {
+    stepIndex = 22;
+    fillBallShotInProgress = true;
+  } else {
+    stepIndex = (throwCount==1) ? 1 : 22;
+  }
+
+  if(throwCount==1){ forceConveyorForBallReturn=true; }
+  prevStepMillis=now;
+}
+
 void runSequence(){
   unsigned long now=millis();
   unsigned long need=stepDuration(stepIndex);
@@ -545,8 +559,9 @@ void runSequence(){
     forceConveyorForBallReturn=false;
     dropCycleJustFinished=false;
     deckHasTenReady=false;
-    strikeDetected=false; 
-    strikePending=false;
+    // Do not clear an already-detected strike here: scoring can report
+    // strike before reset/set completion fully exits.
+    if(!strikeDetected) strikePending=false;
 
     if (fillBallShotInProgress) {
       autoResetFillBall = false;
@@ -557,6 +572,18 @@ void runSequence(){
 
     throwCount=1; waitingForBall=true;
     updateFrameLEDs();
+	
+	 // If a ball was thrown during post-set completion, process it now.
+    if(queuedBallDuringSet){
+      queuedBallDuringSet=false;
+      handleConfirmedBall(millis());
+      ballRearmed=false;
+      lastBallHighMs=millis();
+      ballPending=false;
+      prevStepMillis=millis();
+      return;
+    }
+	
     stepIndex=0; prevStepMillis=millis(); return;
   }
 
