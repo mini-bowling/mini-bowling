@@ -1564,12 +1564,15 @@ void exitPauseMode(){
 // ======================= MAINTENANCE & RESET PROFILES =======================
 
 void triggerLaneReset() {
+  // This section is not needed:
+  // ScoreMore's dynamic pin tracking (checkInputChanges) will automatically 
+  // see the physical button press and report it.
   // 1. Let Scoremore know we're resetting the lane via the physical button
-  Serial.print("INPUT_CHANGE:"); Serial.print(SM_PINSETTER_RESET); Serial.println(":1");
-  delay(50); // Give the serial buffer a tiny gap
-  Serial.print("INPUT_CHANGE:"); Serial.print(SM_PINSETTER_RESET); Serial.println(":0");
+  // Serial.print("INPUT_CHANGE:"); Serial.print(SM_PINSETTER_RESET); Serial.println(":1");
+  // delay(50); // Give the serial buffer a tiny gap
+  // Serial.print("INPUT_CHANGE:"); Serial.print(SM_PINSETTER_RESET); Serial.println(":0");
 
-  // 2. Physically clear the frame similar to bowling a strike
+  // Physically clear the frame similar to bowling a strike
   scoreWindowActive = false;
   ScissorsDrop();
   StrikeSweepClearLane(); 
@@ -1580,7 +1583,7 @@ void triggerLaneReset() {
   strikeEdgeLatched = false; 
   strikeLightOn = false;
   
-  // 3. Send sequencer to step 30 (drops new pins and resets throw count)
+  // Send sequencer to step 30 (drops new pins and resets throw count)
   stepIndex = 30; 
   prevStepMillis = millis();
 }
