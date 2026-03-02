@@ -198,6 +198,15 @@
 #ifndef DEBOUNCE_MS
 #define DEBOUNCE_MS     50
 #endif
+#ifndef IR_BLOCK_MIN_MS
+#define IR_BLOCK_MIN_MS  80    // Minimum LOW time to count a pin pass. DEFAULT: 80
+#endif
+#ifndef IR_CLEAR_MIN_MS
+#define IR_CLEAR_MIN_MS  80    // Minimum HIGH time before re-arming next pin edge. DEFAULT: 80
+#endif
+#ifndef IR_EVENT_LOCKOUT_MS
+#define IR_EVENT_LOCKOUT_MS 250 // Min gap between accepted pin events. DEFAULT: 250
+#endif
 
 // =====================================================
 // TURRET TIMING (milliseconds)
