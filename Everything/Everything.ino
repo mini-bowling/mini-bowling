@@ -179,8 +179,7 @@ bool emptyTurretReturnActive = false;   // true only while EmptyTurret is return
 int queuedPinEvents = 0;
 
 int irStableState=HIGH, irLastRead=HIGH; unsigned long irLastChange=0; bool pinEdgeArmed=true;
-unsigned long irLowStartMs=0, irHighStartMs=0, lastIrAcceptedMs=0;
-
+unsigned long irLowStartMs=0, irHighStartMs=0, lastIrAcceptedMs=0, irAcceptBlockedUntilMs=0;
 bool turretReleaseRequested=false, turretFillTo9Requested=false;
 bool conveyorLockedByDwell=false, suspendConveyorUntilHomeDone=false;
 
@@ -790,7 +789,8 @@ void runTurret(){
   if(!pauseMode){
     bool lowQualified = (irStableState==LOW && irLowStartMs>0 && (nowMs-irLowStartMs)>=IR_BLOCK_MIN_MS);
     bool lockoutElapsed = (lastIrAcceptedMs==0) || ((nowMs-lastIrAcceptedMs)>=IR_EVENT_LOCKOUT_MS);
-    if(pinEdgeArmed && lowQualified && lockoutElapsed){
+   	bool dynamicLockoutElapsed = (nowMs >= irAcceptBlockedUntilMs);
+    if(pinEdgeArmed && lowQualified && lockoutElapsed && dynamicLockoutElapsed){
       queuedPinEvents++;         // record that one more pin has arrived
       pinEdgeArmed = false;      // wait for beam to clear before next
 	  lastIrAcceptedMs = nowMs;  
@@ -854,8 +854,10 @@ void onPinDetected(){
     loadedCount++;
     if(NowCatching>=1 && NowCatching<=8){
       catchDelayActive=true; catchDelayStart=millis();
+	  irAcceptBlockedUntilMs = millis() + CATCH_DELAY_MS;
     }else{
       ninthSettleActive=true; ninthSettleStart=millis();
+	  irAcceptBlockedUntilMs = millis() + NINTH_SETTLE_MS;
       if(deckConeCount==10){
         conesFullHoldArmed=true;
         conesFullHoldStartMs=millis();

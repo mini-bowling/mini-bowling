@@ -199,13 +199,13 @@
 #define DEBOUNCE_MS     50
 #endif
 #ifndef IR_BLOCK_MIN_MS
-#define IR_BLOCK_MIN_MS  80    // Minimum LOW time to count a pin pass. DEFAULT: 80
+#define IR_BLOCK_MIN_MS  100    // Minimum LOW time to count a pin pass. DEFAULT: 100
 #endif
 #ifndef IR_CLEAR_MIN_MS
-#define IR_CLEAR_MIN_MS  80    // Minimum HIGH time before re-arming next pin edge. DEFAULT: 80
+#define IR_CLEAR_MIN_MS  120    // Minimum HIGH time before re-arming next pin edge. DEFAULT: 120
 #endif
 #ifndef IR_EVENT_LOCKOUT_MS
-#define IR_EVENT_LOCKOUT_MS 250 // Min gap between accepted pin events. DEFAULT: 250
+#define IR_EVENT_LOCKOUT_MS 350 // Min gap between accepted pin events. DEFAULT: 350
 #endif
 
 // =====================================================
