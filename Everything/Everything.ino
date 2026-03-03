@@ -66,6 +66,7 @@ unsigned long ballCometStartMs=0, ballCometLastFrame=0;
 void ledsBegin(); void deckAll(uint32_t col); void laneAll(uint32_t col); void ledsShowAll(); void laneShowOnly();
 void laneUpdate(); void startStrikeWipe(); void startStrikeFlash(); void startBallCometImmediate();
 void endAllLaneAnimsToWhite(); void startupWipeWhiteQuick();
+void handleConfirmedBall(unsigned long now);
 
 // NEW: frame LED helpers
 void updateFrameLEDs();
@@ -104,6 +105,7 @@ Servo LeftRaiseServo, RightRaiseServo, SlideServo, ScissorsServo, LeftSweepServo
 
 // ======================= PAUSE MODE =======================
 bool pauseMode = false;
+bool queuedBallDuringSet = false;
 unsigned long lastBallActivityMs = 0;
 
 // Track sweep pose so we can reliably check "sweep is up"
@@ -177,6 +179,8 @@ bool emptyTurretReturnActive = false;   // true only while EmptyTurret is return
 int queuedPinEvents = 0;
 
 int irStableState=HIGH, irLastRead=HIGH; unsigned long irLastChange=0; bool pinEdgeArmed=true;
+unsigned long irLowStartMs=0, irHighStartMs=0, lastIrAcceptedMs=0;
+unsigned long irAcceptBlockedUntilMs=0;
 
 bool turretReleaseRequested=false, turretFillTo9Requested=false;
 bool conveyorLockedByDwell=false, suspendConveyorUntilHomeDone=false;
@@ -339,9 +343,14 @@ void setup(){
     // Beam is already blocked at boot -> treat as one pin event
     pinEdgeArmed     = false;
     queuedPinEvents += 1;
+	irLowStartMs = millis();
+    irHighStartMs = 0;
   } else {
     pinEdgeArmed = true;
+	irHighStartMs = millis();
+    irLowStartMs = 0;
   }
+    lastIrAcceptedMs = 0;
   // =====================================================================
 
   pinMode(HALL_EFFECT_PIN, INPUT_PULLUP);
@@ -412,33 +421,17 @@ void loop(){
   if(rawBall==LOW && ballPrev==HIGH){ ballPending=true; ballLowStartUs=micros(); }
   if(ballPending){
     if(rawBall==LOW){
-      if((micros()-ballLowStartUs)>=BALL_LOW_CONFIRM_US && waitingForBall && ballRearmed){
+   if((micros()-ballLowStartUs)>=BALL_LOW_CONFIRM_US && ballRearmed){
 
-        // If paused and a ball arrives anyway, immediately resume (fail-safe)
-        if(pauseMode){
-          exitPauseMode();
-        }
-
-        waitingForBall=false;
-        lastBallActivityMs = millis();   // NEW: refresh idle timer on ball
-        scoreWindowActive=true;
-
-        scoremoreBallPulse_begin();
-
-        startBallCometImmediate();
-        onBallThrownDoorClose();
-
-        lastPinCatchMs = millis();
-
-        if (inFillBall) {
-          stepIndex = 22;
-          fillBallShotInProgress = true;
-        } else {
-          stepIndex = (throwCount==1) ? 1 : 22;
-        }
-
-        if(throwCount==1){ forceConveyorForBallReturn=true; }
-        prevStepMillis=now; ballRearmed=false; lastBallHighMs=millis(); ballPending=false;
+        if(waitingForBall && ballRearmed){
+          handleConfirmedBall(now);
+          ballRearmed=false; lastBallHighMs=millis(); ballPending=false;
+        }else if(ballRearmed && stepIndex>=32 && stepIndex<=36){
+          // Accept a throw during the post-set finish sequence and
+          // fire it as soon as the machine returns to ready state.
+          queuedBallDuringSet=true;
+          ballRearmed=false; lastBallHighMs=millis(); ballPending=false;
+        }   
       }
     }else{ ballPending=false; }
   }
@@ -456,6 +449,34 @@ void loop(){
 }
 
 // ======================= SEQUENCER =======================
+void handleConfirmedBall(unsigned long now){
+  // If paused and a ball arrives anyway, immediately resume (fail-safe)
+  if(pauseMode){
+    exitPauseMode();
+  }
+
+  waitingForBall=false;
+  lastBallActivityMs = millis();    // NEW: refresh idle timer on ball
+  scoreWindowActive=true;
+
+  scoremoreBallPulse_begin();
+
+  startBallCometImmediate();
+  onBallThrownDoorClose();
+
+  lastPinCatchMs = millis();
+
+  if (inFillBall) {
+    stepIndex = 22;
+    fillBallShotInProgress = true;
+  } else {
+    stepIndex = (throwCount==1) ? 1 : 22;
+  }
+
+  if(throwCount==1){ forceConveyorForBallReturn=true; }
+  prevStepMillis=now;
+}
+
 void runSequence(){
   unsigned long now=millis();
   unsigned long need=stepDuration(stepIndex);
@@ -545,8 +566,9 @@ void runSequence(){
     forceConveyorForBallReturn=false;
     dropCycleJustFinished=false;
     deckHasTenReady=false;
-    strikeDetected=false; 
-    strikePending=false;
+    // Do not clear an already-detected strike here: scoring can report
+    // strike before reset/set completion fully exits.
+    if(!strikeDetected) strikePending=false;
 
     if (fillBallShotInProgress) {
       autoResetFillBall = false;
@@ -557,6 +579,18 @@ void runSequence(){
 
     throwCount=1; waitingForBall=true;
     updateFrameLEDs();
+	
+	 // If a ball was thrown during post-set completion, process it now.
+    if(queuedBallDuringSet){
+      queuedBallDuringSet=false;
+      handleConfirmedBall(millis());
+      ballRearmed=false;
+      lastBallHighMs=millis();
+      ballPending=false;
+      prevStepMillis=millis();
+      return;
+    }
+	
     stepIndex=0; prevStepMillis=millis(); return;
   }
 
@@ -732,19 +766,36 @@ void runTurret(){
     conveyorLockedByDwell=true;
   }
 
-  // IR debounce
+// IR debounce + pulse qualification
+  unsigned long nowMs = millis();
   int raw=digitalRead(IR_SENSOR_PIN);
-  if(raw!=irLastRead){ irLastChange=millis(); irLastRead=raw; }
-  if((millis()-irLastChange)>DEBOUNCE_MS){
-    if(irStableState!=raw) irStableState=raw;
+   if(raw!=irLastRead){ irLastChange=nowMs; irLastRead=raw; }
+  if((nowMs-irLastChange)>DEBOUNCE_MS){
+    if(irStableState!=raw){
+      irStableState=raw;
+      if(irStableState==LOW){
+        irLowStartMs = nowMs;
+      }else{
+        irHighStartMs = nowMs;
+      }
+     }
+    }
+   if(irStableState==HIGH && !pinEdgeArmed && irHighStartMs>0 && (nowMs-irHighStartMs)>=IR_CLEAR_MIN_MS){
+    pinEdgeArmed=true;
   }
-  if(irStableState==HIGH) pinEdgeArmed=true;
 
-  // Queue pin hits whenever we're not in dwell/hold AND not paused (NEW)
-  if(!pauseMode && !releaseDwellActive && !conesFullHold){
-    if(pinEdgeArmed && irStableState==LOW){
+  // Queue pin hits on qualified IR block edges whenever not paused.
+  // Important: we still queue while conveyor movement is temporarily blocked
+  // (dwell/hold/release/home) so a pin that crossed IR just before a stop is
+  // not forgotten when conveyor resumes.
+  if(!pauseMode){
+    bool lowQualified = (irStableState==LOW && irLowStartMs>0 && (nowMs-irLowStartMs)>=IR_BLOCK_MIN_MS);
+    bool lockoutElapsed = (lastIrAcceptedMs==0) || ((nowMs-lastIrAcceptedMs)>=IR_EVENT_LOCKOUT_MS);
+    bool dynamicLockoutElapsed = (nowMs >= irAcceptBlockedUntilMs);
+    if(pinEdgeArmed && lowQualified && lockoutElapsed && dynamicLockoutElapsed){
       queuedPinEvents++;         // record that one more pin has arrived
       pinEdgeArmed = false;      // wait for beam to clear before next
+	  lastIrAcceptedMs = nowMs;  
     }
   }
 
@@ -787,11 +838,13 @@ void servicePinQueue(){
   // Nothing queued?
   if (queuedPinEvents <= 0) return;
 
-  // Don't start a new catch while in dwell, hold, or homing
-  if (releaseDwellActive || conesFullHold || homingActive) return;
+  // Don't start a new catch while in dwell/hold/homing or while slot settle is still active.
+  // This prevents duplicate queued events from being consumed during the 9th-pin settle window.
+  if (releaseDwellActive || conesFullHold || conesFullHoldArmed || homingActive) return;
+  if (catchDelayActive || ninthSettleActive) return;
 
-  // Only handle a new pin when turret is idle and not in catch delay
-  if (moving || catchDelayActive) return;
+  // Only handle a new pin when turret is fully idle.
+  if (moving) return;
 
   // Safe: handle exactly ONE queued pin now
   queuedPinEvents--;
@@ -801,12 +854,16 @@ void servicePinQueue(){
 void onPinDetected(){
   lastPinCatchMs = millis();
 
-  if(loadedCount<9){
+   if(loadedCount<9){
     loadedCount++;
     if(NowCatching>=1 && NowCatching<=8){
       catchDelayActive=true; catchDelayStart=millis();
+      irAcceptBlockedUntilMs = millis() + CATCH_DELAY_MS;
+      queuedPinEvents = 0;
     }else{
       ninthSettleActive=true; ninthSettleStart=millis();
+      irAcceptBlockedUntilMs = millis() + NINTH_SETTLE_MS;
+      queuedPinEvents = 0;
       if(deckConeCount==10){
         conesFullHoldArmed=true;
         conesFullHoldStartMs=millis();
@@ -822,7 +879,11 @@ void onPinDetected(){
       return;
     }
     if( (turretReleaseRequested || (deckIsUp && backgroundRefillRequested)) ){
-      turretReleaseRequested=true; goTo(Pin10ReleasePos()); return;
+       turretReleaseRequested=true;
+      queuedPinEvents=0;    // reject extra pin edges while releasing the 10th
+      pinEdgeArmed=false;
+      goTo(Pin10ReleasePos());
+      return;
     }
     pinEdgeArmed=false; return;
   }
@@ -904,6 +965,11 @@ void runHomingFSM(){
       irStableState = irNow;
       if(irNow == LOW){
         pinEdgeArmed = false;   // beam currently blocked → don't arm yet
+	    irLowStartMs = millis();
+        irHighStartMs = 0;
+      }else{
+        irHighStartMs = millis();
+        irLowStartMs = 0;
       }
 
       suspendConveyorUntilHomeDone=false;
@@ -927,6 +993,10 @@ void updateConveyorOutput(){
 
   if(conveyorLockedByDwell){
     if(millis()-releaseDwellStart<RELEASE_FEED_ASSIST_MS) ConveyorOn();  else ConveyorOff();
+    return;
+  }
+    if(turretReleaseRequested && !releaseDwellActive && (targetPos==Pin10ReleasePos())){
+    ConveyorOff();
     return;
   }
   if(suspendConveyorUntilHomeDone){ ConveyorOff(); return; }
@@ -1209,7 +1279,20 @@ void updateSweepTween(){
 void waitSweepDone(unsigned long timeoutMs){
   unsigned long start=millis();
   while(sweepAnimating && (millis()-start)<timeoutMs){
-    updateSweepTween(); delay(1);
+	// Keep background mechanisms alive while sweep motion completes.
+    // This prevents turret/conveyor catch logic from stalling during
+    // long strike sweep animations.
+    runTurret();
+    updateConveyorOutput();
+    updateBallReturnDoor();
+    updateSweepTween();
+    laneUpdate();
+    if(millis()-prevScoreMillis>=SCORE_INTERVAL){
+      prevScoreMillis=millis();
+      checkSerial();
+      checkInputChanges();
+    }
+    delay(1);
   }
   if(sweepAnimating){
     sweepCurL=sweepTargetL; sweepCurR=sweepTargetR;
