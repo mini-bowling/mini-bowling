@@ -179,7 +179,9 @@ bool emptyTurretReturnActive = false;   // true only while EmptyTurret is return
 int queuedPinEvents = 0;
 
 int irStableState=HIGH, irLastRead=HIGH; unsigned long irLastChange=0; bool pinEdgeArmed=true;
-unsigned long irLowStartMs=0, irHighStartMs=0, lastIrAcceptedMs=0, irAcceptBlockedUntilMs=0;
+unsigned long irLowStartMs=0, irHighStartMs=0, lastIrAcceptedMs=0;
+unsigned long irAcceptBlockedUntilMs=0;
+
 bool turretReleaseRequested=false, turretFillTo9Requested=false;
 bool conveyorLockedByDwell=false, suspendConveyorUntilHomeDone=false;
 
@@ -782,14 +784,14 @@ void runTurret(){
     pinEdgeArmed=true;
   }
 
-// Queue pin hits on qualified IR block edges whenever not paused.
+  // Queue pin hits on qualified IR block edges whenever not paused.
   // Important: we still queue while conveyor movement is temporarily blocked
   // (dwell/hold/release/home) so a pin that crossed IR just before a stop is
   // not forgotten when conveyor resumes.
   if(!pauseMode){
     bool lowQualified = (irStableState==LOW && irLowStartMs>0 && (nowMs-irLowStartMs)>=IR_BLOCK_MIN_MS);
     bool lockoutElapsed = (lastIrAcceptedMs==0) || ((nowMs-lastIrAcceptedMs)>=IR_EVENT_LOCKOUT_MS);
-   	bool dynamicLockoutElapsed = (nowMs >= irAcceptBlockedUntilMs);
+    bool dynamicLockoutElapsed = (nowMs >= irAcceptBlockedUntilMs);
     if(pinEdgeArmed && lowQualified && lockoutElapsed && dynamicLockoutElapsed){
       queuedPinEvents++;         // record that one more pin has arrived
       pinEdgeArmed = false;      // wait for beam to clear before next
@@ -836,11 +838,13 @@ void servicePinQueue(){
   // Nothing queued?
   if (queuedPinEvents <= 0) return;
 
-  // Don't start a new catch while in dwell, hold, or homing
-  if (releaseDwellActive || conesFullHold || homingActive) return;
+  // Don't start a new catch while in dwell/hold/homing or while slot settle is still active.
+  // This prevents duplicate queued events from being consumed during the 9th-pin settle window.
+  if (releaseDwellActive || conesFullHold || conesFullHoldArmed || homingActive) return;
+  if (catchDelayActive || ninthSettleActive) return;
 
-  // Only handle a new pin when turret is idle and not in catch delay
-  if (moving || catchDelayActive) return;
+  // Only handle a new pin when turret is fully idle.
+  if (moving) return;
 
   // Safe: handle exactly ONE queued pin now
   queuedPinEvents--;
@@ -850,14 +854,16 @@ void servicePinQueue(){
 void onPinDetected(){
   lastPinCatchMs = millis();
 
-  if(loadedCount<9){
+   if(loadedCount<9){
     loadedCount++;
     if(NowCatching>=1 && NowCatching<=8){
       catchDelayActive=true; catchDelayStart=millis();
-	  irAcceptBlockedUntilMs = millis() + CATCH_DELAY_MS;
+      irAcceptBlockedUntilMs = millis() + CATCH_DELAY_MS;
+      queuedPinEvents = 0;
     }else{
       ninthSettleActive=true; ninthSettleStart=millis();
-	  irAcceptBlockedUntilMs = millis() + NINTH_SETTLE_MS;
+      irAcceptBlockedUntilMs = millis() + NINTH_SETTLE_MS;
+      queuedPinEvents = 0;
       if(deckConeCount==10){
         conesFullHoldArmed=true;
         conesFullHoldStartMs=millis();
