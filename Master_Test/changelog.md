@@ -5,6 +5,7 @@ All notable changes to the Master Test Script will be documented in this file.
 ## [v1.2.4] - 2026-03-05
 
 ### Added
+- **Turret home adjuster tuning** (`adjust` / `adj` from turret menu): Runs homing, then enters an interactive mode to nudge the turret position with `+`/`-`/`++`/`--` or set a specific value, until the turret marks line up with the turret plate. `done` prints the `#define TURRET_HOME_ADJUSTER` line to paste into `general_config.user.h`; `cancel` discards changes.
 - **Pin pickup sequence** (`pinpickup` / `pp` from sequence menu): Picks up pins from the lane using the scissor deck — opens scissor, lowers to grab height, closes scissor, raises back up
 - **Pin set sequence** (`pinset` / `ps` from sequence menu): Sets scissor-held pins back onto the lane — lowers to drop height, opens scissor, raises back up
 - **Pin cycle sequence** (`pincycle` / `pc` from sequence menu): Repeatedly alternates between pin pickup and pin set until stopped with `x` or Enter
