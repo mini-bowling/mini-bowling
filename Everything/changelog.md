@@ -1,5 +1,10 @@
 # Everything Script - Changelog
 
+## Version 1.2.4 - 2026-03-05
+
+### Changed
+- TBD
+
 ## Version 1.2.3 - 2026-02-23
 
 ### Added

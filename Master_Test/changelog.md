@@ -2,6 +2,11 @@
 
 All notable changes to the Master Test Script will be documented in this file.
 
+## [v1.2.4] - 2026-03-05
+
+### Changed
+- TBD
+
 ## [v1.2.3] - 2026-02-23
 
 ### Added
