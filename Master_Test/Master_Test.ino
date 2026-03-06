@@ -140,7 +140,8 @@ enum HomingPhase {
   HOME_BACKOFF,
   HOME_CREEP_TO_SWITCH,
   HOME_SETZERO_AND_MOVE_SLOT1,
-  HOME_DONE
+  HOME_DONE,
+  HOME_ADJUST_READY
 };
 HomingPhase homingPhase = HOME_IDLE;
 bool homingActive = false;
@@ -151,6 +152,10 @@ bool homingActive = false;
 // steps, ensuring it clears the nearby magnet before searching for it properly.
 long homingStartPos = 0;
 long homingMinSteps = 0;
+
+// Home adjuster tuning state
+bool homeAdjustActive = false;
+int homeAdjustValue = TURRET_HOME_ADJUSTER;
 
 // Sweep Clear state machine (shared by sweep sequence + pin drop pre/post clear)
 enum SweepClearPhase {
@@ -543,7 +548,7 @@ void loop() {
   // Check turret movement complete (suppress during automated sequences)
   if (turretMoving && stepper.distanceToGo() == 0) {
     turretMoving = false;
-    if (!turretLoadActive) {
+    if (!turretLoadActive && !homeAdjustActive) {
       Serial.println(F(">> Movement complete"));
     }
   }
@@ -705,6 +710,12 @@ void stopAllSequences() {
     Serial.println(F(">> Pin cycle STOPPED"));
   }
 
+  if (homeAdjustActive) {
+    homeAdjustActive = false;
+    homeAdjustValue = TURRET_HOME_ADJUSTER;
+    Serial.println(F(">> Home adjustment STOPPED"));
+  }
+
   if (homingActive) {
     homingActive = false;
     homingPhase = HOME_IDLE;
@@ -727,7 +738,7 @@ void processCommand(String cmd) {
     if (seqPrompt != SEQPROMPT_NONE) {
       cmd = "y";
       // Fall through to menu handler
-    } else if (sweepClearActive || pinDropActive || turretLoadActive || homingActive || pinPickupActive || pinSetActive || pinCycleActive) {
+    } else if (sweepClearActive || pinDropActive || turretLoadActive || homingActive || pinPickupActive || pinSetActive || pinCycleActive || homeAdjustActive) {
       stopAllSequences();
       return;
     } else {
@@ -737,7 +748,7 @@ void processCommand(String cmd) {
 
   // Global commands
   if (cmd == "x" || cmd == "stop") {
-    if (sweepClearActive || pinDropActive || turretLoadActive || homingActive || pinPickupActive || pinSetActive || pinCycleActive) {
+    if (sweepClearActive || pinDropActive || turretLoadActive || homingActive || pinPickupActive || pinSetActive || pinCycleActive || homeAdjustActive) {
       stopAllSequences();
       return;
     }
@@ -745,7 +756,19 @@ void processCommand(String cmd) {
   }
 
   if (cmd == "help" || cmd == "h" || cmd == "?") {
-    if (currentMenu == MENU_MAIN) {
+    if (homeAdjustActive && homingPhase == HOME_ADJUST_READY) {
+      Serial.println(F(""));
+      Serial.println(F(">> HOME ADJUSTER TUNING"));
+      Serial.print(F(">> Current value: "));
+      Serial.println(homeAdjustValue);
+      Serial.println(F(">>   +       Adjust +1 step"));
+      Serial.println(F(">>   -       Adjust -1 step"));
+      Serial.println(F(">>   ++      Adjust +5 steps"));
+      Serial.println(F(">>   --      Adjust -5 steps"));
+      Serial.println(F(">>   <num>   Set to specific value"));
+      Serial.println(F(">>   done    Accept & show config line"));
+      Serial.println(F(">>   cancel  Discard changes"));
+    } else if (currentMenu == MENU_MAIN) {
       printMainMenu();
     } else {
       printCurrentSubMenu();
@@ -2004,6 +2027,7 @@ void printTurretMenu() {
   Serial.println(F("===== TURRET TEST (pins 2,3) ====="));
   Serial.println(F("Homing:"));
   Serial.println(F("  home (ho) - Run homing sequence"));
+  Serial.println(F("  adjust (adj) - Tune home adjuster value"));
   Serial.println(F(""));
   Serial.println(F("Slot positions:"));
   Serial.println(F("  1-9       - Move to slot 1-9"));
@@ -2028,12 +2052,100 @@ void printTurretMenu() {
 }
 
 void handleTurretMenu(String cmd) {
+  // Home adjuster mode intercept
+  if (homeAdjustActive && homingPhase == HOME_ADJUST_READY) {
+    if (cmd == "+") {
+      homeAdjustValue += 1;
+      Serial.print(F(">> Adjust +1 -> "));
+      Serial.print(homeAdjustValue);
+      Serial.println(F("  (done to save, cancel to abort)"));
+      turretMoveRelative(-1);
+    }
+    else if (cmd == "-") {
+      homeAdjustValue -= 1;
+      Serial.print(F(">> Adjust -1 -> "));
+      Serial.print(homeAdjustValue);
+      Serial.println(F("  (done to save, cancel to abort)"));
+      turretMoveRelative(1);
+    }
+    else if (cmd == "++") {
+      homeAdjustValue += 5;
+      Serial.print(F(">> Adjust +5 -> "));
+      Serial.print(homeAdjustValue);
+      Serial.println(F("  (done to save, cancel to abort)"));
+      turretMoveRelative(-5);
+    }
+    else if (cmd == "--") {
+      homeAdjustValue -= 5;
+      Serial.print(F(">> Adjust -5 -> "));
+      Serial.print(homeAdjustValue);
+      Serial.println(F("  (done to save, cancel to abort)"));
+      turretMoveRelative(5);
+    }
+    else if (cmd == "done") {
+      Serial.println(F(""));
+      Serial.println(F(">> ADJUSTMENT ACCEPTED"));
+      Serial.print(F(">> Final value: "));
+      Serial.println(homeAdjustValue);
+      Serial.println(F(">> Add this line to general_config.user.h:"));
+      Serial.print(F(">>   #define TURRET_HOME_ADJUSTER "));
+      Serial.println(homeAdjustValue);
+      Serial.println(F(""));
+      homeAdjustActive = false;
+      homingActive = false;
+      homingPhase = HOME_IDLE;
+    }
+    else if (cmd == "cancel") {
+      Serial.println(F(">> Adjustment CANCELLED, reverted to original value"));
+      homeAdjustValue = TURRET_HOME_ADJUSTER;
+      homeAdjustActive = false;
+      homingActive = false;
+      homingPhase = HOME_IDLE;
+    }
+    else {
+      // Check if input is a valid number
+      bool isNumber = (cmd.length() > 0);
+      for (unsigned int i = 0; i < cmd.length(); i++) {
+        if (i == 0 && cmd.charAt(i) == '-') continue;
+        if (cmd.charAt(i) < '0' || cmd.charAt(i) > '9') { isNumber = false; break; }
+      }
+      if (isNumber && cmd != "-") {
+        int newValue = cmd.toInt();
+        if (newValue < -130 || newValue > 130) {
+          Serial.println(F(">> ERROR: Value must be between -130 and 130"));
+        } else {
+          int delta = newValue - homeAdjustValue;
+          homeAdjustValue = newValue;
+          Serial.print(F(">> Set to "));
+          Serial.print(homeAdjustValue);
+          Serial.println(F("  (done to save, cancel to abort)"));
+          turretMoveRelative(-delta);
+        }
+      } else {
+        Serial.print(F(">> Unknown adjust command: "));
+        Serial.println(cmd);
+      }
+    }
+    return;
+  }
+
   if (cmd == "home" || cmd == "ho") {
     if (!hallMonEnabled) {
       Serial.println(F(">> ERROR: Hall sensor monitoring is disabled."));
       Serial.println(F(">> Homing requires the Hall sensor."));
       Serial.println(F(">> Re-enable it in the sensor menu first."));
     } else {
+      startTurretHome();
+    }
+  }
+  else if (cmd == "adjust" || cmd == "adj") {
+    if (!hallMonEnabled) {
+      Serial.println(F(">> ERROR: Hall sensor monitoring is disabled."));
+      Serial.println(F(">> Homing requires the Hall sensor."));
+      Serial.println(F(">> Re-enable it in the sensor menu first."));
+    } else {
+      homeAdjustActive = true;
+      homeAdjustValue = TURRET_HOME_ADJUSTER;
       startTurretHome();
     }
   }
@@ -2200,7 +2312,7 @@ void runHomingFSM() {
         }
       } else {
         Serial.println(F(">> Precise position found!"));
-        stepper.setCurrentPosition(TURRET_HOME_ADJUSTER);
+        stepper.setCurrentPosition(homeAdjustValue);
         stepper.setMaxSpeed(500);
         stepper.setAcceleration(3000);
         turretGoTo(PinPositions[1]);
@@ -2215,13 +2327,33 @@ void runHomingFSM() {
       break;
 
     case HOME_DONE:
-      homingActive = false;
-      homingPhase = HOME_IDLE;
       stepper.setMaxSpeed(TURRET_NORMAL_MAXSPEED);
       stepper.setAcceleration(TURRET_NORMAL_ACCEL);
       Serial.println(F(">> HOMING COMPLETE"));
       Serial.print(F("   Position: "));
       Serial.println(stepper.currentPosition());
+      if (homeAdjustActive) {
+        homingPhase = HOME_ADJUST_READY;
+        Serial.println(F(""));
+        Serial.println(F(">> HOME ADJUSTER TUNING"));
+        Serial.print(F(">> Current value: "));
+        Serial.println(homeAdjustValue);
+        Serial.println(F(">> Adjust until turret marks line up with turret plate."));
+        Serial.println(F(">>   +       Adjust +1 step"));
+        Serial.println(F(">>   -       Adjust -1 step"));
+        Serial.println(F(">>   ++      Adjust +5 steps"));
+        Serial.println(F(">>   --      Adjust -5 steps"));
+        Serial.println(F(">>   <num>   Set to specific value"));
+        Serial.println(F(">>   done    Accept & show config line"));
+        Serial.println(F(">>   cancel  Discard changes"));
+      } else {
+        homingActive = false;
+        homingPhase = HOME_IDLE;
+      }
+      break;
+
+    case HOME_ADJUST_READY:
+      // Waiting for user commands — handled in handleTurretMenu
       break;
 
     default:
