@@ -4,8 +4,17 @@ All notable changes to the Master Test Script will be documented in this file.
 
 ## [v1.2.4] - 2026-03-05
 
-### Changed
-- TBD
+### Added
+- **Pin pickup sequence** (`pinpickup` / `pp` from sequence menu): Picks up pins from the lane using the scissor deck — opens scissor, lowers to grab height, closes scissor, raises back up
+- **Pin set sequence** (`pinset` / `ps` from sequence menu): Sets scissor-held pins back onto the lane — lowers to drop height, opens scissor, raises back up
+- **Pin cycle sequence** (`pincycle` / `pc` from sequence menu): Repeatedly alternates between pin pickup and pin set until stopped with `x` or Enter
+- **Enter key as emergency stop**: Bare Enter (empty input) now stops any running sequence, same as `x`. If a y/n prompt is active, Enter confirms with 'y' instead.
+- **Global disengage command** (`disengage` / `di` from main menu): Detaches all servos and disables motors in one command, useful for manually repositioning components
+
+### Fixed
+- Fix sequence (turret load, pin drop) bugs
+- Fix turret homing timing
+- Fix turret homing bug when at pin drop slot 0 and start homing
 
 ## [v1.2.3] - 2026-02-23
 
