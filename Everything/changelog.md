@@ -3,7 +3,7 @@
 ## Version 1.2.4 - 2026-03-05
 
 ### Changed
-- TBD
+- No changes to the Everything script in this version (Test and Config Tool only)
 
 ## Version 1.2.3 - 2026-02-23
 

@@ -11,6 +11,8 @@ All notable changes to the Master Test Script will be documented in this file.
 - **Pin cycle sequence** (`pincycle` / `pc` from sequence menu): Repeatedly alternates between pin pickup and pin set until stopped with `x` or Enter
 - **Enter key as emergency stop**: Bare Enter (empty input) now stops any running sequence, same as `x`. If a y/n prompt is active, Enter confirms with 'y' instead.
 - **Global disengage command** (`disengage` / `di` from main menu): Detaches all servos and disables motors in one command, useful for manually repositioning components
+- **Clear all sequence** (`clear` / `cl` from sequence menu): Clears all pins from the entire machine — lane, sliding deck, and turret — and returns to a clean state. Sweeps the lane, dumps the sliding deck, homes the turret and releases all turret pins at spring-safe speed, then repeats the deck dump to clear turret-released pins. End state: deck up, sweep guard, slider home, scissor open, ball door closed.
+- **Full test sequence** (`full` / `fl` from sequence menu): Runs a continuous automated test cycle that loads pins from the conveyor, drops them on the lane, picks them up, sets them back down, and sweeps — simulating complete pinsetter operation. Optionally runs a clear all first. Uses background turret loading so the next batch of 10 pins loads while the current batch is being cycled on the lane. Runs indefinitely until stopped with `x` or Enter.
 
 ### Fixed
 - Fix sequence (turret load, pin drop) bugs
