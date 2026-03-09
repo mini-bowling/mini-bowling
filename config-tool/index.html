@@ -1413,7 +1413,9 @@ const GENERAL_GROUPS = [
       { name: 'CATCH_DELAY_MS',         def: '800',  type: 'uint', desc: 'Settle pause after catching a pin at slots 1–8 (ms)' },
       { name: 'RELEASE_DWELL_MS',       def: '1000', type: 'uint', desc: 'Dwell at release position while all pins fall onto deck (ms)' },
       { name: 'RELEASE_FEED_ASSIST_MS', def: '250',  type: 'uint', desc: 'Conveyor assist run duration during release dwell (ms)' },
+      { name: 'RELEASE_HEAD_START_MS', def: '150',  type: 'uint', desc: 'Delay conveyor resume after turret starts deferred release move, so turret reaches slot 10 first (ms)' },
       { name: 'NINTH_SETTLE_MS',        def: '300',  type: 'uint', desc: 'Settle pause after 9th pin caught before waiting for 10th (ms)' },
+      { name: 'TLOAD_ARM_DELAY_MS',     def: '200',  type: 'uint', desc: 'Min beam-clear time before re-arming IR for next pin (ms)' },
     ],
   },
   {
