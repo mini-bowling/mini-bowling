@@ -2,23 +2,6 @@
 
 All notable changes to the Master Test Script will be documented in this file.
 
-## [v1.2.4] - 2026-03-05
-
-### Added
-- **Turret home adjuster tuning** (`adjust` / `adj` from turret menu): Runs homing, then enters an interactive mode to nudge the turret position with `+`/`-`/`++`/`--` or set a specific value, until the turret marks line up with the turret plate. `done` prints the `#define TURRET_HOME_ADJUSTER` line to paste into `general_config.user.h`; `cancel` discards changes.
-- **Pin pickup sequence** (`pinpickup` / `pp` from sequence menu): Picks up pins from the lane using the scissor deck — opens scissor, lowers to grab height, closes scissor, raises back up
-- **Pin set sequence** (`pinset` / `ps` from sequence menu): Sets scissor-held pins back onto the lane — lowers to drop height, opens scissor, raises back up
-- **Pin cycle sequence** (`pincycle` / `pc` from sequence menu): Repeatedly alternates between pin pickup and pin set until stopped with `x` or Enter
-- **Enter key as emergency stop**: Bare Enter (empty input) now stops any running sequence, same as `x`. If a y/n prompt is active, Enter confirms with 'y' instead.
-- **Global disengage command** (`disengage` / `di` from main menu): Detaches all servos and disables motors in one command, useful for manually repositioning components
-- **Clear all sequence** (`clear` / `cl` from sequence menu): Clears all pins from the entire machine — lane, sliding deck, and turret — and returns to a clean state. Sweeps the lane, dumps the sliding deck, homes the turret and releases all turret pins at spring-safe speed, then repeats the deck dump to clear turret-released pins. End state: deck up, sweep guard, slider home, scissor open, ball door closed.
-- **Full test sequence** (`full` / `fl` from sequence menu): Runs a continuous automated test cycle that loads pins from the conveyor, drops them on the lane, picks them up, sets them back down, and sweeps — simulating complete pinsetter operation. Optionally runs a clear all first. Uses background turret loading so the next batch of 10 pins loads while the current batch is being cycled on the lane. Runs indefinitely until stopped with `x` or Enter.
-
-### Fixed
-- Fix sequence (turret load, pin drop) bugs
-- Fix turret homing timing
-- Fix turret homing bug when at pin drop slot 0 and start homing
-
 ## [v1.2.3] - 2026-02-23
 
 ### Added

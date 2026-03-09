@@ -214,9 +214,6 @@
 #ifndef NINTH_SETTLE_MS
 #define NINTH_SETTLE_MS         300   // Settle time after 9th pin caught. DEFAULT: 300
 #endif
-#ifndef TLOAD_ARM_DELAY_MS
-#define TLOAD_ARM_DELAY_MS      200   // Min beam-clear time before re-arming IR for next pin. DEFAULT: 200
-#endif
 
 // =====================================================
 // EVERYTHING-SPECIFIC TIMING (milliseconds)

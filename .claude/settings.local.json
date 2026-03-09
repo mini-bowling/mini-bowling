@@ -2,10 +2,7 @@
   "permissions": {
     "allow": [
       "Bash(ls:*)",
-      "Bash(git mv:*)",
-      "Bash(head:*)",
-      "Bash(wc:*)",
-      "Bash(find:*)"
+      "Bash(git mv:*)"
     ]
   }
 }

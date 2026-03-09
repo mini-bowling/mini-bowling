@@ -81,8 +81,6 @@ These rules MUST be followed in any automated sequence to avoid mechanical damag
 
 17. **Scissor should be in drop position before sliding deck releases pins.** This keeps the scissors open so the pins can slide through the opening before the sliding deck moves to the release position.
 
-18. **Deck must be prepared before any sequence moves turret to release position (slot 10).** In automated sequence code, always ensure: raise servos at `RAISE_UP_ANGLE` (with settle wait), sliding deck at `SLIDER_HOME_ANGLE`, and scissor at `SCISSOR_GRAB_ANGLE` before the turret begins moving to the release position. This does not apply to manual test menu commands, only to automated sequences.
-
 ## Test Script: Pin Drop Sequence (Automated)
 
 The pin drop sequence sets a rack of pins on the lane. It is accessed via the **Sequence** menu (`sq` from main menu), then `pd`/`pindrop`. The user is prompted for pre-clear and post-clear options.
@@ -177,40 +175,6 @@ The turret loading logic in the test script mirrors how `Everything.ino` loads p
 - Everything uses `pumpAll()` for blocking waits; the test script uses a non-blocking FSM
 - Everything has complex background refill logic with `backgroundRefillRequested`, `conesFullHold`, etc.; the test script does a single load-and-release cycle
 - Everything tracks `loadedCount`, `NowCatching`, `queuedPinEvents` globally; the test script uses `tl`-prefixed local state
-
-## Test Script: Pin Pickup Sequence (Automated)
-
-The pin pickup sequence picks up pins from the lane using the scissor deck. Accessed via the **Sequence** menu (`sq` from main menu), then `pp`/`pinpickup`. The user is asked to confirm pins are on the lane and the scissors are empty before starting.
-
-### Sequence steps:
-1. **Scissor open** — Move scissor to `SCISSOR_DROP_ANGLE`. Wait `PDROP_SETTLE_MS`.
-2. **Raise to grab height** — Lower deck to `RAISE_GRAB_ANGLE`. Wait `PDROP_RAISE_SETTLE_MS`.
-3. **Scissor close (grab)** — Move scissor to `SCISSOR_GRAB_ANGLE` to grip pins. Wait `PDROP_SETTLE_MS`.
-4. **Raise up** — Lift deck to `RAISE_UP_ANGLE`. Wait `PDROP_RAISE_SETTLE_MS`.
-5. **Done.**
-
-## Test Script: Pin Set Sequence (Automated)
-
-The pin set sequence releases pins held in the scissor deck back onto the lane. It is the complement to pin pickup. Accessed via the **Sequence** menu, then `ps`/`pinset`. The user is asked to confirm the lane is clear (no pins on lane) before starting.
-
-### Sequence steps:
-1. **Raise to drop height** — Lower deck to `RAISE_DROP_ANGLE`. Wait `PDROP_RAISE_SETTLE_MS`.
-2. **Scissor open (release)** — Move scissor to `SCISSOR_DROP_ANGLE` to release pins onto the lane. Wait `PDROP_SETTLE_MS`.
-3. **Raise up** — Lift deck to `RAISE_UP_ANGLE`. Wait `PDROP_RAISE_SETTLE_MS`.
-4. **Done.**
-
-Note: `RAISE_DROP_ANGLE` is the partial drop height used specifically for the re-drop/set scenario, not `RAISE_DOWN_ANGLE` (which is used only for setting pins from the sliding deck).
-
-## Test Script: Pin Cycle Sequence (Automated)
-
-The pin cycle sequence repeatedly alternates between pin pickup and pin set until stopped with `x`. Accessed via the **Sequence** menu, then `pc`/`pincycle`. The user is asked for the same confirmation as pin pickup **once**, then the cycle runs autonomously.
-
-### Cycle order:
-1. Pin Pickup (picks up pins from lane)
-2. Pin Set (sets them back down)
-3. Repeat from 1 until `x` is pressed.
-
-The cycle uses the same FSMs as the standalone pinpickup and pinset sequences, driven by the `pinCycleActive` flag that causes each sequence's `DONE` phase to auto-launch the next sequence.
 
 ## Test Script: Code Architecture
 
