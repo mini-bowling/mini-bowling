@@ -167,6 +167,7 @@ enum SweepClearPhase {
   SCLEAR_RAISE_WAIT,
   SCLEAR_SWEEP_BACK,
   SCLEAR_SWEEP_WAIT,
+  SCLEAR_BACK_PAUSE,
   SCLEAR_SWEEP_GUARD,
   SCLEAR_SWEEP_GUARD_WAIT,
   SCLEAR_DONE
@@ -873,6 +874,11 @@ void processCommand(String cmd) {
   }
 
   if (cmd == "back" || cmd == "b" || cmd == "exit" || cmd == "main") {
+    // Block back when turret adjustment sub-menu is active
+    if (homeAdjustActive && homingPhase == HOME_ADJUST_READY) {
+      Serial.println(F(">> Use 'done' or 'cancel' to exit adjustment mode"));
+      return;
+    }
     if (currentMenu != MENU_MAIN) {
       seqPrompt = SEQPROMPT_NONE;
       detachCurrentServos();
@@ -2690,6 +2696,13 @@ void runSweepClearFSM() {
 
     case SCLEAR_SWEEP_WAIT:
       if (!sweepAnimating) {
+        sweepClearPhaseMs = millis();
+        sweepClearPhase = SCLEAR_BACK_PAUSE;
+      }
+      break;
+
+    case SCLEAR_BACK_PAUSE:
+      if (millis() - sweepClearPhaseMs >= 250) {
         Serial.println(F("   Phase: Sweep to guard"));
         startSweepTo(SWEEP_GUARD_ANGLE, 180 - SWEEP_GUARD_ANGLE);
         sweepClearPhase = SCLEAR_SWEEP_GUARD;
