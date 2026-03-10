@@ -2,3 +2,4 @@
 
 # PlatformIO build artifacts
 .pio/
+*debug*.txt

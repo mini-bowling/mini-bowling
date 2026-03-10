@@ -148,6 +148,12 @@
 #define TURRET_PIN10_RELEASE_OFFSET -30
 #endif
 
+// Max drift (steps) before re-homing is triggered after release.
+// Hall sensor position is checked on the return move to slot 1.
+#ifndef TURRET_VERIFY_TOLERANCE
+#define TURRET_VERIFY_TOLERANCE  20      // DEFAULT: 20
+#endif
+
 // Extra offset for empty-turret purge at boot
 #ifndef TURRET_EMPTY_EXTRA_OFFSET
 #define TURRET_EMPTY_EXTRA_OFFSET   -60 // DEFAULT: -60

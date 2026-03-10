@@ -148,6 +148,12 @@
 #define TURRET_PIN10_RELEASE_OFFSET -30
 #endif
 
+// Max drift (steps) before re-homing is triggered after release.
+// Hall sensor position is checked on the return move to slot 1.
+#ifndef TURRET_VERIFY_TOLERANCE
+#define TURRET_VERIFY_TOLERANCE  20      // DEFAULT: 20
+#endif
+
 // Extra offset for empty-turret purge at boot
 #ifndef TURRET_EMPTY_EXTRA_OFFSET
 #define TURRET_EMPTY_EXTRA_OFFSET   -60 // DEFAULT: -60
@@ -194,6 +200,9 @@
 
 // =====================================================
 // INPUT DEBOUNCE TIME (milliseconds)
+// Filters all observed IR jitter: leading-edge bounce (0-1ms),
+// trailing-edge bounce (0-1ms), post-clear echo (27-43ms).
+// All jitter events are well under 50ms.
 // =====================================================
 #ifndef DEBOUNCE_MS
 #define DEBOUNCE_MS     50
@@ -201,9 +210,17 @@
 
 // =====================================================
 // TURRET TIMING (milliseconds)
+//
+// Real-world pin timing (from conveyor test runs):
+//   Pin blocks IR sensor for 203-331ms (typical ~275-310ms)
+//   Gap between consecutive pins: 584-1005ms (typical ~730ms)
 // =====================================================
 #ifndef CATCH_DELAY_MS
 #define CATCH_DELAY_MS          800   // Pause after catching pin at slots 1-8. DEFAULT: 800
+                                      // Gives the pin time to settle in the turret slot before
+                                      // advancing. IR re-arm happens during this window
+                                      // (~525-560ms after catch) so the next pin is detected
+                                      // even if it arrives before the delay expires.
 #endif
 #ifndef RELEASE_DWELL_MS
 #define RELEASE_DWELL_MS        1000  // Dwell at release position for pins to fall. DEFAULT: 1000
@@ -216,6 +233,9 @@
 #endif
 #ifndef TLOAD_ARM_DELAY_MS
 #define TLOAD_ARM_DELAY_MS      200   // Min beam-clear time before re-arming IR for next pin. DEFAULT: 200
+                                      // Must be > post-clear echo window (~143ms from pin clear)
+                                      // to prevent jitter-based false detections. 200ms provides
+                                      // ~57ms margin over worst-case echo timing.
 #endif
 
 // =====================================================

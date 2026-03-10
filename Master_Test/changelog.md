@@ -2,6 +2,23 @@
 
 All notable changes to the Master Test Script will be documented in this file.
 
+## [v1.3.0] - 2026-03-30
+
+### Added
+- **IR sensor timing diagnostics** (`debug` / `de`): Records raw IR transitions during turret load into a ring buffer. Prompted on sequence completion/stop, or viewable anytime from the sequence menu.
+- **Full test cycle count**: `full 10` / `fl 30` auto-stops after N cycles. Displays progress as "Cycle 3 of 10". Still cancellable early with `x`/Enter.
+- **Concurrent sequence guard**: All sequence commands now prevent starting while another is running.
+- **Deck LEDs on during full test**: White on start, off on stop/completion.
+
+### Changed
+- **Conveyor timing**: Catch delay now starts from pin detection time rather than queue consumption, preventing cumulative drift.
+- **Ninth settle waits for pin to clear**: Prevents phantom 10th pin detection from slow-clearing pins or post-clear IR echoes.
+- **Scissors stay open for turret release**: Only close during pin pickup.
+
+### Config
+- Added `TURRET_VERIFY_TOLERANCE` (default 20) to `general_config.h` and config-tool
+- Added timing documentation to `DEBOUNCE_MS`, `CATCH_DELAY_MS`, and `TLOAD_ARM_DELAY_MS` comments
+
 ## [v1.2.4] - 2026-03-05
 
 ### Added
