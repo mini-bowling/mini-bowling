@@ -1,6 +1,6 @@
 # Pin Configuration Tool - Changelog
 
-## [v1.2.4] - 2026-02-20
+## [v1.3.0] - 2026-02-20
 
 Initial release.
 

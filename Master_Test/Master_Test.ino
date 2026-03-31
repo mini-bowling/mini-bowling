@@ -1,5 +1,5 @@
 // =====================================================
-// MASTER TEST SCRIPT v1.2.4 - Pinsetter Component Tester
+// MASTER TEST SCRIPT v1.3.0 - Pinsetter Component Tester
 // Consolidated test script for all pinsetter components
 //
 // Type 'help' for main menu, 'back' to return from sub-menus
@@ -206,7 +206,8 @@ enum SequencePrompt {
   SEQPROMPT_PS_CONFIRM,
   SEQPROMPT_PC_READY,
   SEQPROMPT_FULL_CONFIRM,
-  SEQPROMPT_FULL_PRECLEAR
+  SEQPROMPT_FULL_PRECLEAR,
+  SEQPROMPT_TL_TIMING
 };
 SequencePrompt seqPrompt = SEQPROMPT_NONE;
 bool pinDropPreClear = false;
@@ -245,6 +246,7 @@ enum ClearAllPhase {
   CLALL_CLOSE_BALL_DOOR,
   CLALL_SWEEP1,
   CLALL_WAIT_SWEEP1,
+  CLALL_RAISE_DROP1,
   CLALL_SCISSOR_OPEN1,
   CLALL_RAISE_DOWN1,
   CLALL_SLIDER_RELEASE1,
@@ -252,15 +254,15 @@ enum ClearAllPhase {
   CLALL_SLIDER_HOME1,
   CLALL_SWEEP2,
   CLALL_WAIT_SWEEP2,
-  CLALL_SCISSOR_GRAB,
   CLALL_HOMING,
   CLALL_WAIT_HOMING,
+  CLALL_FAST_TO_SLOT9,
+  CLALL_WAIT_FAST_TO_SLOT9,
   CLALL_MOVE_RELEASE,
   CLALL_WAIT_MOVE_RELEASE,
   CLALL_RELEASE_DWELL,
   CLALL_MOVE_SLOT1,
   CLALL_WAIT_MOVE_SLOT1,
-  CLALL_SCISSOR_OPEN2,
   CLALL_RAISE_DOWN2,
   CLALL_SLIDER_RELEASE2,
   CLALL_RAISE_UP2,
@@ -300,6 +302,7 @@ FullTestPhase fullTestPhase = FTEST_IDLE;
 bool fullTestActive = false;
 unsigned long fullTestPhaseMs = 0;
 int fullTestCycle = 0;
+int fullTestTargetCycles = 0;  // 0 = unlimited
 
 // Turret Load state machine
 enum TurretLoadPhase {
@@ -314,6 +317,11 @@ enum TurretLoadPhase {
   TLOAD_HOLD_RELEASE,
   TLOAD_TENTH_SETTLE,
   TLOAD_RELEASE_DWELL,
+  TLOAD_VERIFY_MOVE_SLOT1,
+  TLOAD_VERIFY_APPROACH,
+  TLOAD_VERIFY_CREEP,
+  TLOAD_VERIFY_EVAL,
+  TLOAD_REHOMING,
   TLOAD_MOVE_SLOT1,
   TLOAD_DONE
 };
@@ -332,10 +340,36 @@ int tlIrStable = HIGH;
 unsigned long tlIrLastChange = 0;
 bool tlPinArmed = true;
 int tlQueuedPins = 0;
+unsigned long tlQueuedDetectMs = 0;  // millis() when the queued pin was first detected
 bool tlConveyorStopped = false;
+
+// Turret load IR timing (raw sensor transitions, no debounce)
+// Stores events in a buffer and prints on sequence completion/stop
+struct TlTimingEvent {
+  unsigned long timeMs;     // elapsed ms since conveyor start
+  unsigned long durationMs; // blocked duration (for clear events) or gap since last clear (for detect events)
+  int pinNum;               // which pin (raw block count), or load number for marker events
+  char type;                // 'D' = detected, 'C' = cleared, 'R' = turret released (marker)
+};
+#define TL_TIMING_MAX 200
+TlTimingEvent tlTimingLog[TL_TIMING_MAX];
+int tlTimingLogCount = 0;   // total events written (may exceed TL_TIMING_MAX)
+int tlTimingLogHead = 0;    // next write index (ring buffer)
+
+unsigned long tlTimingStart = 0;
+unsigned long tlTimingBlockStart = 0;
+unsigned long tlTimingLastClear = 0;
+bool tlTimingBlocked = false;
+int tlTimingPinCount = 0;
+int tlTimingLoadNum = 0;
 
 // Turret load hold-release (for full test background loading)
 bool turretLoadHoldRelease = false;
+
+// Hall sensor drift verification after release
+bool tlVerifyHallSeen = false;       // Hall sensor triggered during verification creep
+long tlVerifyHallPos = 0;            // Stepper position when hall first triggered
+bool tlVerifyForFullTest = false;    // Which path to resume after verify/rehome
 // Signal that pins have been released to deck (set in RELEASE_DWELL, consumed by full test FSM)
 bool turretPinsReleasedToDeck = false;
 
@@ -395,6 +429,13 @@ void ConveyorOff() { digitalWrite(MOTOR_RELAY_PIN, CONVEYOR_ACTIVE_HIGH ? LOW : 
 
 // Forward declaration (default parameter requires declaration before first use)
 void startTurretHome(long minSteps = 0);
+
+// Check if any automated sequence is currently running
+bool anySequenceRunning() {
+  return sweepClearActive || pinDropActive || turretLoadActive || homingActive
+      || pinPickupActive || pinSetActive || pinCycleActive || fullTestActive
+      || clearAllActive;
+}
 
 // Strip selection helper strings
 String getStripSelectName(StripSelect sel) {
@@ -522,7 +563,7 @@ void setup() {
 
   Serial.println(F(""));
   Serial.println(F("========================================"));
-  Serial.println(F("   MASTER TEST SCRIPT v1.2.4"));
+  Serial.println(F("   MASTER TEST SCRIPT v1.3.0"));
   Serial.println(F("   Pinsetter Component Tester"));
   Serial.println(F("========================================"));
   Serial.println(F(""));
@@ -753,6 +794,8 @@ void monitorInputs() {
 // =====================================================
 
 void stopAllSequences() {
+  seqPrompt = SEQPROMPT_NONE;
+
   if (sweepClearActive) {
     sweepClearActive = false;
     sweepClearPhase = SCLEAR_IDLE;
@@ -765,6 +808,8 @@ void stopAllSequences() {
     Serial.println(F(">> Pin drop sequence STOPPED"));
   }
 
+  bool hasTiming = false;
+
   if (turretLoadActive) {
     turretLoadActive = false;
     turretLoadPhase = TLOAD_IDLE;
@@ -773,6 +818,7 @@ void stopAllSequences() {
     Serial.print(F(">> Turret load sequence STOPPED ("));
     Serial.print(turretPinsLoaded);
     Serial.println(F(" pins in turret)"));
+    if (tlTimingLogCount > 0) hasTiming = true;
   }
 
   if (pinPickupActive) {
@@ -797,7 +843,9 @@ void stopAllSequences() {
     fullTestPhase = FTEST_IDLE;
     turretLoadHoldRelease = false;
     turretPinsReleasedToDeck = false;
-    Serial.println(F(">> Full test STOPPED"));
+    deckAll(C_OFF());
+    deckShow();
+    Serial.println(F(">> Full test STOPPED (deck LEDs off)"));
   }
 
   if (clearAllActive) {
@@ -822,8 +870,12 @@ void stopAllSequences() {
   stepper.stop();
   stepper.setCurrentPosition(stepper.currentPosition());
   turretMoving = false;
-  seqPrompt = SEQPROMPT_NONE;
   Serial.println(F(""));
+
+  if (hasTiming) {
+    seqPrompt = SEQPROMPT_TL_TIMING;
+    Serial.println(F("Display IR sensor and turret timing diagnostic data? (y/N)"));
+  }
 }
 
 void processCommand(String cmd) {
@@ -833,7 +885,8 @@ void processCommand(String cmd) {
   // otherwise stops any running sequence
   if (cmd.length() == 0) {
     if (seqPrompt != SEQPROMPT_NONE) {
-      cmd = "y";
+      // Timing prompt defaults to 'n' on bare Enter; all others default to 'y'
+      cmd = (seqPrompt == SEQPROMPT_TL_TIMING) ? "n" : "y";
       // Fall through to menu handler
     } else if (sweepClearActive || pinDropActive || turretLoadActive || homingActive || pinPickupActive || pinSetActive || pinCycleActive || homeAdjustActive || fullTestActive || clearAllActive) {
       stopAllSequences();
@@ -2478,9 +2531,11 @@ void printSequenceMenu() {
   Serial.println(F("  pinpickup (pp)    - Pick up pins from lane"));
   Serial.println(F("  pinset (ps)       - Set held pins back on lane"));
   Serial.println(F("  pincycle (pc)     - Cycle pickup/set repeatedly"));
-  Serial.println(F("  full (fl)         - Full cycle: load/drop/pickup/set/sweep"));
+  Serial.println(F("  full (fl) [N]     - Full cycle: load/drop/pickup/set/sweep"));
+  Serial.println(F("                      e.g. 'full 10' to run 10 cycles"));
   Serial.println(F("  clear (cl)        - Clear all pins (lane, deck, turret)"));
   Serial.println(F(""));
+  Serial.println(F("  debug (de)        - Show turret load timing data"));
   Serial.println(F("  stop (x/<Enter>)  - Stop running sequence"));
   Serial.println(F("  back (b)          - Return to main menu"));
   Serial.println(F("==============================="));
@@ -2523,6 +2578,9 @@ void handleSequenceMenu(String cmd) {
         seqPrompt = SEQPROMPT_NONE;
         turretPinsLoaded = 0;
         startFullTest();
+      } else if (seqPrompt == SEQPROMPT_TL_TIMING) {
+        seqPrompt = SEQPROMPT_NONE;
+        printTurretLoadTiming();
       }
     } else if (cmd == "n" || cmd == "no") {
       if (seqPrompt == SEQPROMPT_PD_PRECLEAR) {
@@ -2557,6 +2615,9 @@ void handleSequenceMenu(String cmd) {
       } else if (seqPrompt == SEQPROMPT_FULL_CONFIRM) {
         seqPrompt = SEQPROMPT_NONE;
         Serial.println(F(">> Full test cancelled"));
+      } else if (seqPrompt == SEQPROMPT_TL_TIMING) {
+        seqPrompt = SEQPROMPT_NONE;
+        Serial.println(F(">> Timing data kept. Use 'debug' to view later."));
       }
     } else {
       Serial.println(F(">> Please enter 'y' or 'n'"));
@@ -2565,8 +2626,8 @@ void handleSequenceMenu(String cmd) {
   }
 
   if (cmd == "sweep" || cmd == "sw") {
-    if (sweepClearActive || pinDropActive || turretLoadActive) {
-      Serial.println(F(">> A sequence is already running"));
+    if (anySequenceRunning()) {
+      Serial.println(F(">> A sequence is already running. Stop it first (x)."));
       return;
     }
     Serial.println(F(""));
@@ -2574,10 +2635,18 @@ void handleSequenceMenu(String cmd) {
     startSweepClear();
   }
   else if (cmd == "pindrop" || cmd == "pd") {
+    if (anySequenceRunning()) {
+      Serial.println(F(">> A sequence is already running. Stop it first (x)."));
+      return;
+    }
     seqPrompt = SEQPROMPT_PD_PRECLEAR;
     Serial.println(F("Clear lane before dropping? (Y/n)"));
   }
   else if (cmd == "turretload" || cmd == "tl") {
+    if (anySequenceRunning()) {
+      Serial.println(F(">> A sequence is already running. Stop it first (x)."));
+      return;
+    }
     if (turretPinsLoaded > 0) {
       Serial.print(F("System shows "));
       Serial.print(turretPinsLoaded);
@@ -2593,8 +2662,8 @@ void handleSequenceMenu(String cmd) {
     }
   }
   else if (cmd == "pinpickup" || cmd == "pp") {
-    if (pinPickupActive || pinSetActive || pinCycleActive || pinDropActive || turretLoadActive || sweepClearActive) {
-      Serial.println(F(">> A sequence is already running"));
+    if (anySequenceRunning()) {
+      Serial.println(F(">> A sequence is already running. Stop it first (x)."));
       return;
     }
     seqPrompt = SEQPROMPT_PP_READY;
@@ -2602,38 +2671,54 @@ void handleSequenceMenu(String cmd) {
     Serial.println(F("and no pins already in the scissors? (Y/n)"));
   }
   else if (cmd == "pinset" || cmd == "ps") {
-    if (pinPickupActive || pinSetActive || pinCycleActive || pinDropActive || turretLoadActive || sweepClearActive) {
-      Serial.println(F(">> A sequence is already running"));
+    if (anySequenceRunning()) {
+      Serial.println(F(">> A sequence is already running. Stop it first (x)."));
       return;
     }
     seqPrompt = SEQPROMPT_PS_CONFIRM;
     Serial.println(F("Confirm no pins on the lane (scissors are holding pins)? (Y/n)"));
   }
   else if (cmd == "pincycle" || cmd == "pc") {
-    if (pinPickupActive || pinSetActive || pinCycleActive || pinDropActive || turretLoadActive || sweepClearActive) {
-      Serial.println(F(">> A sequence is already running"));
+    if (anySequenceRunning()) {
+      Serial.println(F(">> A sequence is already running. Stop it first (x)."));
       return;
     }
     seqPrompt = SEQPROMPT_PC_READY;
     Serial.println(F("Are there pins on the lane ready to pick up,"));
     Serial.println(F("and no pins already in the scissors? (Y/n)"));
   }
-  else if (cmd == "full" || cmd == "fl") {
-    if (fullTestActive || pinPickupActive || pinSetActive || pinCycleActive || pinDropActive || turretLoadActive || sweepClearActive || clearAllActive) {
-      Serial.println(F(">> A sequence is already running"));
+  else if (cmd == "full" || cmd == "fl"
+           || cmd.startsWith("full ") || cmd.startsWith("fl ")) {
+    if (anySequenceRunning()) {
+      Serial.println(F(">> A sequence is already running. Stop it first (x)."));
       return;
+    }
+    // Parse optional cycle count: "full 30" or "fl 15"
+    fullTestTargetCycles = 0;  // default unlimited
+    int spaceIdx = cmd.indexOf(' ');
+    if (spaceIdx > 0) {
+      int n = cmd.substring(spaceIdx + 1).toInt();
+      if (n > 0) {
+        fullTestTargetCycles = n;
+        Serial.print(F(">> Will run "));
+        Serial.print(fullTestTargetCycles);
+        Serial.println(F(" cycles (x to cancel early)"));
+      }
     }
     seqPrompt = SEQPROMPT_FULL_PRECLEAR;
     Serial.println(F("Run a full clear first? (Y/n)"));
   }
   else if (cmd == "clear" || cmd == "cl") {
-    if (fullTestActive || pinPickupActive || pinSetActive || pinCycleActive || pinDropActive || turretLoadActive || sweepClearActive || clearAllActive) {
-      Serial.println(F(">> A sequence is already running"));
+    if (anySequenceRunning()) {
+      Serial.println(F(">> A sequence is already running. Stop it first (x)."));
       return;
     }
     Serial.println(F(""));
     Serial.println(F(">> Starting CLEAR ALL sequence..."));
     startClearAll();
+  }
+  else if (cmd == "debug" || cmd == "de") {
+    printTurretLoadTiming();
   }
   else {
     Serial.print(F("Unknown: "));
@@ -2894,6 +2979,12 @@ void startTurretLoad() {
   tlNowCatching = (turretPinsLoaded < 9) ? turretPinsLoaded + 1 : 9;
   tlQueuedPins = 0;
 
+  // Clear timing log from previous sequence
+  tlTimingLogCount = 0;
+  tlTimingLogHead = 0;
+  tlTimingPinCount = 0;
+  tlTimingLoadNum = 0;
+
   Serial.println(F(""));
   // Turn on deck LEDs (white, normal brightness)
   deckL.setBrightness(DECK_LED_BRIGHTNESS);
@@ -2945,6 +3036,72 @@ void startTurretLoad() {
   }
 }
 
+void printTurretLoadTiming() {
+  if (tlTimingLogCount == 0) {
+    Serial.println(F("   [TIMING] No IR events recorded."));
+    return;
+  }
+  Serial.println(F(""));
+  Serial.println(F("   ======== IR SENSOR TIMING ========"));
+  int numEntries = tlTimingLogCount < TL_TIMING_MAX ? tlTimingLogCount : TL_TIMING_MAX;
+  int startIdx = tlTimingLogCount <= TL_TIMING_MAX ? 0 : tlTimingLogHead;  // oldest entry
+  if (tlTimingLogCount > TL_TIMING_MAX) {
+    Serial.print(F("   (showing last "));
+    Serial.print(TL_TIMING_MAX);
+    Serial.print(F(" of "));
+    Serial.print(tlTimingLogCount);
+    Serial.println(F(" events)"));
+  }
+  for (int i = 0; i < numEntries; i++) {
+    TlTimingEvent &e = tlTimingLog[(startIdx + i) % TL_TIMING_MAX];
+    if (e.type == 'R') {
+      Serial.print(F("   --- Turret load #"));
+      Serial.print(e.pinNum);
+      Serial.print(F(" released to deck (time: "));
+      Serial.print(e.timeMs);
+      Serial.println(F("ms) ---"));
+      continue;
+    }
+    if (e.type == 'P') {
+      Serial.print(F("   >> CAUGHT pin "));
+      Serial.print(e.pinNum);
+      Serial.print(F("/9 (time: "));
+      Serial.print(e.timeMs);
+      Serial.println(F("ms)"));
+      continue;
+    }
+    if (e.type == 'A') {
+      Serial.print(F("   >> ADVANCE to slot "));
+      Serial.print(e.pinNum);
+      Serial.print(F(" (time: "));
+      Serial.print(e.timeMs);
+      Serial.println(F("ms)"));
+      continue;
+    }
+    Serial.print(F("   * Pin "));
+    Serial.print(e.pinNum);
+    if (e.type == 'D') {
+      Serial.print(F(" Detected  (time: "));
+      Serial.print(e.timeMs);
+      Serial.print(F("ms"));
+      if (e.durationMs > 0) {
+        Serial.print(F(", gap: "));
+        Serial.print(e.durationMs);
+        Serial.print(F("ms"));
+      }
+      Serial.println(F(")"));
+    } else {
+      Serial.print(F(" Cleared   (time: "));
+      Serial.print(e.timeMs);
+      Serial.print(F("ms, blocked: "));
+      Serial.print(e.durationMs);
+      Serial.println(F("ms)"));
+    }
+  }
+  Serial.println(F("   =================================="));
+  Serial.println(F(""));
+}
+
 void runTurretLoadFSM() {
   if (!turretLoadActive) return;
 
@@ -2953,19 +3110,71 @@ void runTurretLoadFSM() {
   // IR debounce (runs during catching phases, including waiting for 10th pin)
   if (turretLoadPhase >= TLOAD_WAIT_CATCH && turretLoadPhase <= TLOAD_WAIT_TENTH) {
     int raw = digitalRead(IR_SENSOR_PIN);
+
+    // Raw IR timing (no debounce — stores every transition for later output)
+    bool rawBlocked = (raw == LOW);
+    if (rawBlocked != tlTimingBlocked) {
+      unsigned long t = now - tlTimingStart;
+      if (rawBlocked) {
+        tlTimingBlocked = true;
+        tlTimingBlockStart = now;
+        tlTimingPinCount++;
+        tlTimingLog[tlTimingLogHead].timeMs = t;
+        tlTimingLog[tlTimingLogHead].durationMs = (tlTimingPinCount > 1 && tlTimingLastClear > 0) ? (now - tlTimingLastClear) : 0;
+        tlTimingLog[tlTimingLogHead].pinNum = tlTimingPinCount;
+        tlTimingLog[tlTimingLogHead].type = 'D';
+        tlTimingLogHead = (tlTimingLogHead + 1) % TL_TIMING_MAX;
+        tlTimingLogCount++;
+      } else {
+        tlTimingBlocked = false;
+        unsigned long blocked = now - tlTimingBlockStart;
+        tlTimingLastClear = now;
+        tlTimingLog[tlTimingLogHead].timeMs = t;
+        tlTimingLog[tlTimingLogHead].durationMs = blocked;
+        tlTimingLog[tlTimingLogHead].pinNum = tlTimingPinCount;
+        tlTimingLog[tlTimingLogHead].type = 'C';
+        tlTimingLogHead = (tlTimingLogHead + 1) % TL_TIMING_MAX;
+        tlTimingLogCount++;
+      }
+    }
+
     if (raw != tlIrLastRaw) { tlIrLastChange = now; tlIrLastRaw = raw; }
     if ((now - tlIrLastChange) > DEBOUNCE_MS) {
       if (tlIrStable != raw) tlIrStable = raw;
     }
-    // Re-arm when beam has been clear long enough. Three layers of protection
-    // against IR beam stutter (pin wobbling in slot after catch):
-    //  1. DEBOUNCE_MS (50ms): raw noise filtering (already applied above)
-    //  2. TLOAD_ARM_DELAY_MS (200ms): beam must be clear at the raw level
-    //     for this long before re-arming — filters out settle wobble
-    //  3. CATCH_DELAY phase suppression: never re-arm during CATCH_DELAY
-    //     even if the delay expires (belt-and-suspenders)
+    // ── IR re-arm logic ──────────────────────────────────────
+    // Re-arm when beam has been clear long enough. Two layers
+    // of protection prevent double-counting the caught pin:
+    //
+    //  Layer 1 – DEBOUNCE_MS (50ms): Raw noise filter (above).
+    //    All observed jitter is well under 50ms:
+    //      • Leading-edge bounce: 0–1ms, multiple in same ms
+    //      • Trailing-edge bounce: 0–1ms, right after pin clears
+    //      • Post-clear echo: 27–43ms, ~96–123ms after clear
+    //    None survive the 50ms debounce window.
+    //
+    //  Layer 2 – TLOAD_ARM_DELAY_MS (200ms): Beam must be clear
+    //    at the raw level for 200ms AND tlIrStable must be HIGH.
+    //    Covers the post-clear echo window (~143ms from clear)
+    //    with ~57ms margin. Echoes reset tlIrLastChange, so the
+    //    200ms countdown restarts; re-arm at ~343ms after clear.
+    //
+    // Real-world pin timing (from conveyor test runs):
+    //   • Pin blocks sensor for 203–331ms (typical ~275–310ms)
+    //   • Gap between consecutive pins: 584–1005ms (typical ~730ms)
+    //   • Time from catch to re-arm: ~525–560ms
+    //     (clear ~300ms + debounce 50ms + arm delay 200ms)
+    //   • Next pin arrives ~430ms after previous clears
+    //     (730ms gap – 300ms blocked)
+    //   • Re-arm happens ~170–205ms before next pin → safe margin
+    //
+    // Previously a third layer suppressed re-arm during the entire
+    // CATCH_DELAY phase. This was removed because it caused missed
+    // detections: pins arriving during the 800ms window would enter
+    // and clear the sensor while re-arm was suppressed, resulting
+    // in double-stacked pins in the turret.
+    // ──────────────────────────────────────────────────────────
     if (tlIrStable == HIGH
-        && turretLoadPhase != TLOAD_CATCH_DELAY
         && (now - tlIrLastChange) >= TLOAD_ARM_DELAY_MS) {
       tlPinArmed = true;
     }
@@ -2973,6 +3182,7 @@ void runTurretLoadFSM() {
     // Detect pin arrival
     if (tlPinArmed && tlIrStable == LOW) {
       tlQueuedPins++;
+      tlQueuedDetectMs = now;  // record when this pin was detected
       tlPinArmed = false;
       Serial.print(F("   [IR] Pin queued (phase="));
       Serial.print(turretLoadPhase);
@@ -3011,6 +3221,16 @@ void runTurretLoadFSM() {
         ConveyorOn();
         conveyorIsOn = true;
         Serial.println(F("   Conveyor ON - Feed pins into turret"));
+        // Reset per-load timing state (log persists across loads)
+        tlTimingLoadNum++;
+        tlTimingStart = now;
+        tlTimingBlocked = (tlIrLastRaw == LOW);
+        tlTimingBlockStart = 0;
+        tlTimingLastClear = 0;
+        if (tlTimingBlocked) {
+          tlTimingBlockStart = now;
+          tlTimingPinCount = 1;
+        }
         if (tlLoadedCount >= 9) {
           // Already have 9 pins, just need the 10th
           Serial.println(F("   9 pins already loaded. Waiting for 10th pin..."));
@@ -3019,11 +3239,9 @@ void runTurretLoadFSM() {
         } else if (tlIrLastRaw == LOW) {
           // A pin is already at the IR sensor before loading starts. Count it
           // for the current slot and go straight to CATCH_DELAY so it has time
-          // to settle into the turret. Keep the sensor disarmed during this
-          // delay so the pin clearing + a new conveyor pin arriving doesn't
-          // create a queued detection that shifts all subsequent slot timing.
-          // The sensor re-arms naturally when CATCH_DELAY ends and the turret
-          // advances to the next slot.
+          // to settle into the turret. The sensor starts disarmed (tlPinArmed
+          // = false) and re-arms naturally via the arm-delay mechanism once
+          // the pin clears and the beam stays clear for TLOAD_ARM_DELAY_MS.
           tlPinArmed = false;
           tlLoadedCount++;
           turretPinsLoaded = tlLoadedCount;
@@ -3053,21 +3271,50 @@ void runTurretLoadFSM() {
         Serial.print(tlLoadedCount);
         Serial.println(F("/9)"));
 
+        // Log pin-caught event
+        tlTimingLog[tlTimingLogHead].timeMs = now - tlTimingStart;
+        tlTimingLog[tlTimingLogHead].durationMs = 0;
+        tlTimingLog[tlTimingLogHead].pinNum = tlLoadedCount;
+        tlTimingLog[tlTimingLogHead].type = 'P';
+        tlTimingLogHead = (tlTimingLogHead + 1) % TL_TIMING_MAX;
+        tlTimingLogCount++;
+
         if (tlLoadedCount < 9) {
-          tlPhaseStartMs = now;
+          // Catch delay timer starts from when the pin was DETECTED at the
+          // sensor, not when the queue is consumed. This prevents cumulative
+          // drift when pins arrive during a previous CATCH_DELAY or ADVANCING.
+          // CATCH_DELAY also requires tlIrStable == HIGH (pin has cleared and
+          // jitter has settled) before advancing — so even if the delay has
+          // already elapsed, the turret won't advance until the pin is gone.
+          tlPhaseStartMs = tlQueuedDetectMs;
           turretLoadPhase = TLOAD_CATCH_DELAY;
         } else {
-          tlPhaseStartMs = now;
+          tlPhaseStartMs = tlQueuedDetectMs;
           turretLoadPhase = TLOAD_NINTH_SETTLE;
         }
       }
       break;
 
     case TLOAD_CATCH_DELAY:
-      if (now - tlPhaseStartMs >= CATCH_DELAY_MS) {
+      // Advance when BOTH conditions are met:
+      //  1. Enough time has elapsed since the pin was detected (CATCH_DELAY_MS)
+      //  2. The pin has cleared the sensor and jitter has settled (tlIrStable == HIGH)
+      // Normally the pin clears ~300ms after detection and debounce confirms ~350ms,
+      // so condition 2 is satisfied well before condition 1 (800ms). But if a pin
+      // takes unusually long to clear, we wait for it rather than advancing early.
+      if ((now - tlPhaseStartMs >= CATCH_DELAY_MS) && tlIrStable == HIGH) {
         tlNowCatching++;
         Serial.print(F("   Advancing to slot "));
         Serial.println(tlNowCatching);
+
+        // Log turret-advance event
+        tlTimingLog[tlTimingLogHead].timeMs = now - tlTimingStart;
+        tlTimingLog[tlTimingLogHead].durationMs = 0;
+        tlTimingLog[tlTimingLogHead].pinNum = tlNowCatching;
+        tlTimingLog[tlTimingLogHead].type = 'A';
+        tlTimingLogHead = (tlTimingLogHead + 1) % TL_TIMING_MAX;
+        tlTimingLogCount++;
+
         stepper.setMaxSpeed(TURRET_NORMAL_MAXSPEED);
         stepper.setAcceleration(TURRET_NORMAL_ACCEL);
         turretGoTo(PinPositions[tlNowCatching]);
@@ -3084,22 +3331,25 @@ void runTurretLoadFSM() {
       break;
 
     case TLOAD_NINTH_SETTLE:
-      if (now - tlPhaseStartMs >= NINTH_SETTLE_MS) {
+      // Wait for BOTH: settle time elapsed AND 9th pin has cleared the sensor.
+      // Two failure modes without these guards:
+      //  1. Slow-clearing pins (block 339-408ms > NINTH_SETTLE_MS 300ms):
+      //     The 9th pin is still blocking when settle expires. A raw sensor
+      //     check would misidentify it as a pre-existing 10th pin.
+      //  2. Post-clear echoes (echo 55ms after pin clears): The 9th pin
+      //     clears within 300ms, but a brief echo re-blocks the raw sensor.
+      //     tlIrStable stays HIGH (echo too short for debounce), so a raw
+      //     check would read LOW during the echo — another phantom 10th pin.
+      // Fix: require tlIrStable == HIGH (handles case 1) and remove the
+      // proactive raw check entirely (handles case 2). A real 10th pin
+      // cannot be at the sensor this soon — minimum inter-pin gap (~584ms+)
+      // far exceeds the settle window. WAIT_TENTH detects it normally via
+      // the arm-delay mechanism.
+      if ((now - tlPhaseStartMs >= NINTH_SETTLE_MS) && tlIrStable == HIGH) {
         Serial.println(F("   9 pins loaded. Waiting for 10th pin..."));
         tlQueuedPins = 0;
-        // Don't force-arm (tlPinArmed = true) — if the beam cleared late
-        // in the settle period, tlIrStable may still be LOW (debounce lag)
-        // and force-arming would instantly create a phantom 10th pin.
-        // Instead, check the raw sensor directly: if physically blocked,
-        // a 10th pin is genuinely there — queue it. If clear, the normal
-        // arm-delay mechanism in WAIT_TENTH handles arming safely.
-        if (digitalRead(IR_SENSOR_PIN) == LOW) {
-          Serial.println(F("   [IR] 10th pin already at sensor"));
-          tlQueuedPins = 1;
-        }
         tlPinArmed = false;
-        // Re-sync debounce state with actual sensor so arm delay starts
-        // from a clean baseline
+        // Re-sync debounce state so arm delay starts from clean baseline
         tlIrLastRaw = digitalRead(IR_SENSOR_PIN);
         tlIrStable = tlIrLastRaw;
         tlIrLastChange = now;
@@ -3122,10 +3372,7 @@ void runTurretLoadFSM() {
           ensureSliderAttached();
           SlideServo.write(SLIDER_HOME_ANGLE);
           sliderAngle = SLIDER_HOME_ANGLE;
-          ensureScissorAttached();
-          ScissorsServo.write(SCISSOR_GRAB_ANGLE);
-          scissorAngle = SCISSOR_GRAB_ANGLE;
-          Serial.println(F("   Sliding deck home, scissor grab."));
+          Serial.println(F("   Sliding deck home."));
           Serial.println(F("   Moving turret to release position..."));
           long releasePos = PinPositions[10] + TURRET_PIN10_RELEASE_OFFSET;
           stepper.setMaxSpeed(TURRET_SPRING_MAXSPEED);
@@ -3145,10 +3392,7 @@ void runTurretLoadFSM() {
         ensureSliderAttached();
         SlideServo.write(SLIDER_HOME_ANGLE);
         sliderAngle = SLIDER_HOME_ANGLE;
-        ensureScissorAttached();
-        ScissorsServo.write(SCISSOR_GRAB_ANGLE);
-        scissorAngle = SCISSOR_GRAB_ANGLE;
-        Serial.println(F("   Sliding deck home, scissor grab."));
+        Serial.println(F("   Sliding deck home."));
         // Move turret to release
         Serial.println(F("   Moving turret to release position..."));
         long releasePos = PinPositions[10] + TURRET_PIN10_RELEASE_OFFSET;
@@ -3181,31 +3425,124 @@ void runTurretLoadFSM() {
     case TLOAD_RELEASE_DWELL:
       if (now - tlPhaseStartMs >= RELEASE_DWELL_MS) {
         turretPinsLoaded = 0;  // Pins released to deck
+        // Log a turret-released marker in the timing buffer
+        tlTimingLog[tlTimingLogHead].timeMs = now - tlTimingStart;
+        tlTimingLog[tlTimingLogHead].durationMs = 0;
+        tlTimingLog[tlTimingLogHead].pinNum = tlTimingLoadNum;
+        tlTimingLog[tlTimingLogHead].type = 'R';
+        tlTimingLogHead = (tlTimingLogHead + 1) % TL_TIMING_MAX;
+        tlTimingLogCount++;
         ConveyorOff();
         conveyorIsOn = false;
+        // Hall sensor is triggered at release position (near slot 10) —
+        // ignore it here. Verification happens after returning to slot 1
+        // and approaching the hall sensor from the slot 1 side.
+        Serial.println(F("   Release complete. Returning to slot 1..."));
         if (fullTestActive) {
-          // During full test, skip re-homing and immediately start loading
-          // the next batch. The turret position is still valid from the
-          // initial home. Reset counters and go to MOVE_TO_SLOT1 which will
-          // start the conveyor as soon as the stepper reaches slot 1.
-          Serial.println(F("   Release complete. Moving to slot 1 to start next load..."));
           turretPinsReleasedToDeck = true;
           turretLoadHoldRelease = true;  // Hold 10th pin of next batch
           tlLoadedCount = 0;
           tlNowCatching = 1;
           tlQueuedPins = 0;
-          stepper.setMaxSpeed(TURRET_NORMAL_MAXSPEED);
-          stepper.setAcceleration(TURRET_NORMAL_ACCEL);
-          turretGoTo(PinPositions[1]);
-          turretLoadPhase = TLOAD_MOVE_TO_SLOT1;
+          tlVerifyForFullTest = true;
         } else {
-          // Move to slot 1 — homing already done, position is still valid
-          Serial.println(F("   Release complete. Moving to slot 1..."));
+          tlVerifyForFullTest = false;
+        }
+        stepper.setMaxSpeed(TURRET_NORMAL_MAXSPEED);
+        stepper.setAcceleration(TURRET_NORMAL_ACCEL);
+        turretGoTo(PinPositions[1]);
+        turretLoadPhase = TLOAD_VERIFY_MOVE_SLOT1;
+      }
+      break;
+
+    case TLOAD_VERIFY_MOVE_SLOT1:
+      // Wait for turret to reach slot 1 (long way: 10->9->...->1).
+      // Hall sensor is in the gap past slot 1 — not traversed during this move.
+      if (!turretMoving) {
+        Serial.println(F("   At slot 1. Verifying hall sensor position..."));
+        // Move quickly to 50 steps before expected hall position.
+        // Approach from the slot 1 side (negative of hall) so we can
+        // creep in the positive direction — same as homing — to hit
+        // the same leading edge of the magnet.
+        stepper.setMaxSpeed(TURRET_NORMAL_MAXSPEED);
+        stepper.setAcceleration(TURRET_NORMAL_ACCEL);
+        turretGoTo(homeAdjustValue - 50);
+        turretLoadPhase = TLOAD_VERIFY_APPROACH;
+      }
+      break;
+
+    case TLOAD_VERIFY_APPROACH:
+      // Wait for fast approach to complete, then creep through hall zone
+      if (!turretMoving) {
+        stepper.setMaxSpeed(TURRET_NORMAL_MAXSPEED / 2);
+        stepper.setAcceleration(TURRET_NORMAL_ACCEL);
+        tlVerifyHallSeen = false;
+        tlVerifyHallPos = 0;
+        // Creep 100 steps in the POSITIVE direction through the hall zone.
+        // Same direction as homing (which creeps +2 at a time) so we hit
+        // the same leading edge of the magnet detection zone.
+        // Expected trigger at homeAdjustValue (-63), centered in this range.
+        turretGoTo(homeAdjustValue + 50);
+        turretLoadPhase = TLOAD_VERIFY_CREEP;
+      }
+      break;
+
+    case TLOAD_VERIFY_CREEP:
+      // Monitor hall sensor during slow creep
+      if (!tlVerifyHallSeen && digitalRead(HALL_EFFECT_PIN) == LOW) {
+        tlVerifyHallSeen = true;
+        tlVerifyHallPos = stepper.currentPosition();
+        // Stop immediately — we have our measurement
+        stepper.stop();
+        stepper.setCurrentPosition(stepper.currentPosition());
+        turretTargetPos = stepper.currentPosition();  // Sync so next turretGoTo() isn't suppressed
+        turretMoving = false;
+      }
+      if (!turretMoving) {
+        turretLoadPhase = TLOAD_VERIFY_EVAL;
+      }
+      break;
+
+    case TLOAD_VERIFY_EVAL: {
+      if (!tlVerifyHallSeen) {
+        Serial.println(F("   Hall sensor NOT detected during verification. Re-homing..."));
+        startTurretHome();
+        turretLoadPhase = TLOAD_REHOMING;
+      } else {
+        long drift = abs(tlVerifyHallPos - homeAdjustValue);
+        if (drift <= TURRET_VERIFY_TOLERANCE) {
+          Serial.print(F("   Hall verified (drift: "));
+          Serial.print(drift);
+          Serial.print(F(" steps, expected "));
+          Serial.print(homeAdjustValue);
+          Serial.print(F(", actual "));
+          Serial.print(tlVerifyHallPos);
+          Serial.println(F(")"));
+          // Return to slot 1 to continue
           stepper.setMaxSpeed(TURRET_NORMAL_MAXSPEED);
           stepper.setAcceleration(TURRET_NORMAL_ACCEL);
           turretGoTo(PinPositions[1]);
-          turretLoadPhase = TLOAD_MOVE_SLOT1;
+          turretLoadPhase = tlVerifyForFullTest ? TLOAD_MOVE_TO_SLOT1 : TLOAD_MOVE_SLOT1;
+        } else {
+          Serial.print(F("   Hall drift too large ("));
+          Serial.print(drift);
+          Serial.print(F(" steps, expected "));
+          Serial.print(homeAdjustValue);
+          Serial.print(F(", actual "));
+          Serial.print(tlVerifyHallPos);
+          Serial.println(F("). Re-homing..."));
+          startTurretHome();
+          turretLoadPhase = TLOAD_REHOMING;
         }
+      }
+      break;
+    }
+
+    case TLOAD_REHOMING:
+      // Wait for homing FSM to complete (turret will be at slot 1 after)
+      if (!homingActive) {
+        Serial.println(F("   Re-homing complete."));
+        turretLoadPhase = tlVerifyForFullTest ? TLOAD_MOVE_TO_SLOT1 : TLOAD_MOVE_SLOT1;
       }
       break;
 
@@ -3221,7 +3558,10 @@ void runTurretLoadFSM() {
       turretLoadPhase = TLOAD_IDLE;
       Serial.println(F(">> Turret load sequence COMPLETE"));
       Serial.println(F("   10 pins loaded and released to deck"));
-      Serial.println(F(""));
+      if (tlTimingLogCount > 0) {
+        seqPrompt = SEQPROMPT_TL_TIMING;
+        Serial.println(F("Display IR sensor and turret timing diagnostic data? (y/N)"));
+      }
       break;
 
     default:
@@ -3432,7 +3772,21 @@ void runClearAllFSM() {
 
     case CLALL_WAIT_SWEEP1:
       if (!sweepClearActive) {
-        Serial.println(F("   Lane cleared. Clearing sliding deck..."));
+        Serial.println(F("   Lane cleared. Lowering deck to drop position..."));
+        ensureRaiseAttached();
+        raiseLeftPos = RAISE_DROP_ANGLE;
+        raiseRightPos = 180 - RAISE_DROP_ANGLE;
+        LeftRaiseServo.write(raiseLeftPos);
+        RightRaiseServo.write(raiseRightPos);
+        clearAllPhaseMs = now;
+        clearAllPhase = CLALL_RAISE_DROP1;
+      }
+      break;
+
+    // --- Phase 2: Clear sliding deck ---
+    case CLALL_RAISE_DROP1:
+      if (now - clearAllPhaseMs >= PDROP_RAISE_SETTLE_MS) {
+        Serial.println(F("   Deck at drop. Opening scissor..."));
         ensureScissorAttached();
         scissorAngle = SCISSOR_DROP_ANGLE;
         ScissorsServo.write(scissorAngle);
@@ -3441,11 +3795,9 @@ void runClearAllFSM() {
       }
       break;
 
-    // --- Phase 2: Clear sliding deck ---
     case CLALL_SCISSOR_OPEN1:
       if (now - clearAllPhaseMs >= PDROP_SETTLE_MS) {
-        Serial.println(F("   Scissor open. Lowering deck..."));
-        ensureRaiseAttached();
+        Serial.println(F("   Scissor open. Lowering deck to set position..."));
         raiseLeftPos = RAISE_DOWN_ANGLE;
         raiseRightPos = 180 - RAISE_DOWN_ANGLE;
         LeftRaiseServo.write(raiseLeftPos);
@@ -3503,22 +3855,12 @@ void runClearAllFSM() {
 
     case CLALL_WAIT_SWEEP2:
       if (!sweepClearActive) {
-        Serial.println(F("   Lane cleared. Preparing for turret release..."));
-        scissorAngle = SCISSOR_GRAB_ANGLE;
-        ScissorsServo.write(scissorAngle);
-        clearAllPhaseMs = now;
-        clearAllPhase = CLALL_SCISSOR_GRAB;
-      }
-      break;
-
-    // --- Phase 3: Clear turret ---
-    case CLALL_SCISSOR_GRAB:
-      if (now - clearAllPhaseMs >= PDROP_SETTLE_MS) {
+        // --- Phase 3: Clear turret ---
         if (turretIsHomed) {
-          Serial.println(F("   Scissor grab. Turret already homed. Moving to release..."));
+          Serial.println(F("   Lane cleared. Turret already homed. Moving to release..."));
           clearAllPhase = CLALL_WAIT_HOMING;  // Skip to move-to-release
         } else {
-          Serial.println(F("   Scissor grab. Homing turret..."));
+          Serial.println(F("   Lane cleared. Homing turret..."));
           startTurretHome();
           clearAllPhase = CLALL_HOMING;
         }
@@ -3532,6 +3874,19 @@ void runClearAllFSM() {
     case CLALL_WAIT_HOMING:
       if (!homingActive) {
         Serial.println(F("   Moving to release position..."));
+        stepper.setMaxSpeed(TURRET_NORMAL_MAXSPEED);
+        stepper.setAcceleration(TURRET_NORMAL_ACCEL);
+        turretGoTo(PinPositions[9]);
+        clearAllPhase = CLALL_FAST_TO_SLOT9;
+      }
+      break;
+
+    case CLALL_FAST_TO_SLOT9:
+      clearAllPhase = CLALL_WAIT_FAST_TO_SLOT9;
+      break;
+
+    case CLALL_WAIT_FAST_TO_SLOT9:
+      if (!turretMoving) {
         long releasePos = PinPositions[10] + TURRET_PIN10_RELEASE_OFFSET;
         stepper.setMaxSpeed(TURRET_SPRING_MAXSPEED);
         stepper.setAcceleration(TURRET_SPRING_ACCEL);
@@ -3555,7 +3910,7 @@ void runClearAllFSM() {
       break;
 
     case CLALL_RELEASE_DWELL:
-      if (now - clearAllPhaseMs >= TLOAD_RELEASE_DWELL) {
+      if (now - clearAllPhaseMs >= RELEASE_DWELL_MS) {
         Serial.println(F("   Turret released. Moving to slot 1..."));
         stepper.setMaxSpeed(TURRET_NORMAL_MAXSPEED);
         stepper.setAcceleration(TURRET_NORMAL_ACCEL);
@@ -3571,18 +3926,8 @@ void runClearAllFSM() {
     case CLALL_WAIT_MOVE_SLOT1:
       if (stepper.distanceToGo() == 0) {
         turretMoving = false;
-        Serial.println(F("   At slot 1. Clearing sliding deck..."));
-        scissorAngle = SCISSOR_DROP_ANGLE;
-        ScissorsServo.write(scissorAngle);
-        clearAllPhaseMs = now;
-        clearAllPhase = CLALL_SCISSOR_OPEN2;
-      }
-      break;
-
-    // --- Phase 2 repeat: Clear sliding deck after turret dump ---
-    case CLALL_SCISSOR_OPEN2:
-      if (now - clearAllPhaseMs >= PDROP_SETTLE_MS) {
-        Serial.println(F("   Scissor open. Lowering deck..."));
+        // Scissors already open from first pass — go straight to down/set
+        Serial.println(F("   At slot 1. Lowering deck to set position..."));
         raiseLeftPos = RAISE_DOWN_ANGLE;
         raiseRightPos = 180 - RAISE_DOWN_ANGLE;
         LeftRaiseServo.write(raiseLeftPos);
@@ -3673,23 +4018,39 @@ void runClearAllFSM() {
 // =====================================================
 
 void startFullTestWithClear() {
+  // Clear timing log from previous sequence
+  tlTimingLogCount = 0;
+  tlTimingLogHead = 0;
+  tlTimingPinCount = 0;
+  tlTimingLoadNum = 0;
   fullTestActive = true;
   fullTestCycle = 1;
   fullTestPhase = FTEST_PRECLEAR;
   fullTestPhaseMs = millis();
   Serial.println(F(""));
   Serial.println(F(">> Starting FULL TEST sequence (with clear)..."));
+  deckAll(C_WHITE());
+  deckShow();
+  Serial.println(F("   Deck LEDs on (white)."));
   Serial.println(F("   Running clear all first..."));
   startClearAll();
 }
 
 void startFullTest() {
+  // Clear timing log from previous sequence
+  tlTimingLogCount = 0;
+  tlTimingLogHead = 0;
+  tlTimingPinCount = 0;
+  tlTimingLoadNum = 0;
   fullTestActive = true;
   fullTestCycle = 1;
   fullTestPhase = FTEST_CLOSE_BALL_DOOR;
   fullTestPhaseMs = millis();
   Serial.println(F(""));
   Serial.println(F(">> Starting FULL TEST sequence..."));
+  deckAll(C_WHITE());
+  deckShow();
+  Serial.println(F("   Deck LEDs on (white)."));
   Serial.println(F("   Closing ball door..."));
   ensureBallDoorAttached();
   ballDoorAngle = BALL_DOOR_CLOSED_ANGLE;
@@ -3815,10 +4176,38 @@ void runFullTestFSM() {
     case FTEST_LOOP:
       Serial.print(F(">> Cycle "));
       Serial.print(fullTestCycle);
+      if (fullTestTargetCycles > 0) {
+        Serial.print(F(" of "));
+        Serial.print(fullTestTargetCycles);
+      }
       Serial.println(F(" complete."));
+      // Check if we've reached the target
+      if (fullTestTargetCycles > 0 && fullTestCycle >= fullTestTargetCycles) {
+        fullTestActive = false;
+        fullTestPhase = FTEST_IDLE;
+        turretLoadHoldRelease = false;
+        turretPinsReleasedToDeck = false;
+        // Stop background turret load (conveyor may still be running)
+        if (turretLoadActive) {
+          turretLoadActive = false;
+          turretLoadPhase = TLOAD_IDLE;
+          ConveyorOff();
+          conveyorIsOn = false;
+        }
+        deckAll(C_OFF());
+        deckShow();
+        Serial.print(F(">> Full test FINISHED ("));
+        Serial.print(fullTestCycle);
+        Serial.println(F(" cycles, deck LEDs off)"));
+        break;
+      }
       fullTestCycle++;
       Serial.print(F(">> Starting cycle "));
       Serial.print(fullTestCycle);
+      if (fullTestTargetCycles > 0) {
+        Serial.print(F(" of "));
+        Serial.print(fullTestTargetCycles);
+      }
       Serial.println(F("..."));
       fullTestPhase = FTEST_PIN_DROP;
       break;
