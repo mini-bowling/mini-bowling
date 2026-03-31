@@ -211,8 +211,10 @@
 // =====================================================
 // TURRET TIMING (milliseconds)
 //
-// Real-world pin timing (from conveyor test runs):
-//   Pin blocks IR sensor for 203-331ms (typical ~275-310ms)
+// Real-world pin timing (from Conveyor_Timing sketch, raw unfiltered transitions):
+//   "Blocked" = time from raw LOW (pin arrives) to raw HIGH (pin clears)
+//   "Gap"     = edge-to-edge clear time: raw HIGH (pin clears) to raw LOW (next pin arrives)
+//   Blocked duration: 203-331ms (typical ~275-310ms)
 //   Gap between consecutive pins: 584-1005ms (typical ~730ms)
 // =====================================================
 #ifndef CATCH_DELAY_MS
@@ -227,6 +229,14 @@
 #endif
 #ifndef RELEASE_FEED_ASSIST_MS
 #define RELEASE_FEED_ASSIST_MS  250   // Conveyor assist during release dwell. DEFAULT: 250
+#endif
+#ifndef RELEASE_HEAD_START_MS
+#define RELEASE_HEAD_START_MS   150   // When the 10th pin is deferred (tenthPinReady) and the turret
+                                      // starts its release move, delay conveyor resume by this amount
+                                      // so the turret reaches slot 10 before the conveyor feeds the
+                                      // next pin. Without this, the conveyor and turret start at the
+                                      // same time and the pin can arrive before the turret is in
+                                      // position. DEFAULT: 150
 #endif
 #ifndef NINTH_SETTLE_MS
 #define NINTH_SETTLE_MS         300   // Settle time after 9th pin caught. DEFAULT: 300
