@@ -207,7 +207,10 @@ enum SequencePrompt {
   SEQPROMPT_PC_READY,
   SEQPROMPT_FULL_CONFIRM,
   SEQPROMPT_FULL_PRECLEAR,
-  SEQPROMPT_TL_TIMING
+  SEQPROMPT_TL_TIMING,
+  SEQPROMPT_CT_PRECLEAR,
+  SEQPROMPT_CT_READY,
+  SEQPROMPT_CT_RAWTIMING
 };
 SequencePrompt seqPrompt = SEQPROMPT_NONE;
 bool pinDropPreClear = false;
@@ -303,6 +306,17 @@ bool fullTestActive = false;
 unsigned long fullTestPhaseMs = 0;
 int fullTestCycle = 0;
 int fullTestTargetCycles = 0;  // 0 = unlimited
+
+// Conveyor Timing Test state machine
+enum ConvTimingPhase {
+  CTIME_IDLE = 0,
+  CTIME_PRECLEAR,
+  CTIME_WAIT_PRECLEAR,
+  CTIME_WAIT_LOAD,
+  CTIME_DONE
+};
+ConvTimingPhase convTimingPhase = CTIME_IDLE;
+bool convTimingActive = false;
 
 // Turret Load state machine
 enum TurretLoadPhase {
@@ -434,7 +448,7 @@ void startTurretHome(long minSteps = 0);
 bool anySequenceRunning() {
   return sweepClearActive || pinDropActive || turretLoadActive || homingActive
       || pinPickupActive || pinSetActive || pinCycleActive || fullTestActive
-      || clearAllActive;
+      || clearAllActive || convTimingActive;
 }
 
 // Strip selection helper strings
@@ -668,6 +682,10 @@ void loop() {
     runClearAllFSM();
   }
 
+  if (convTimingActive) {
+    runConvTimingFSM();
+  }
+
   // Check turret movement complete (suppress during automated sequences)
   if (turretMoving && stepper.distanceToGo() == 0) {
     turretMoving = false;
@@ -854,6 +872,12 @@ void stopAllSequences() {
     Serial.println(F(">> Clear all STOPPED"));
   }
 
+  if (convTimingActive) {
+    convTimingActive = false;
+    convTimingPhase = CTIME_IDLE;
+    Serial.println(F(">> Conveyor timing test STOPPED"));
+  }
+
   if (homeAdjustActive) {
     homeAdjustActive = false;
     homeAdjustValue = TURRET_HOME_ADJUSTER;
@@ -885,10 +909,10 @@ void processCommand(String cmd) {
   // otherwise stops any running sequence
   if (cmd.length() == 0) {
     if (seqPrompt != SEQPROMPT_NONE) {
-      // Timing prompt defaults to 'n' on bare Enter; all others default to 'y'
-      cmd = (seqPrompt == SEQPROMPT_TL_TIMING) ? "n" : "y";
+      // Timing prompts default to 'n' on bare Enter; all others default to 'y'
+      cmd = (seqPrompt == SEQPROMPT_TL_TIMING || seqPrompt == SEQPROMPT_CT_RAWTIMING) ? "n" : "y";
       // Fall through to menu handler
-    } else if (sweepClearActive || pinDropActive || turretLoadActive || homingActive || pinPickupActive || pinSetActive || pinCycleActive || homeAdjustActive || fullTestActive || clearAllActive) {
+    } else if (sweepClearActive || pinDropActive || turretLoadActive || homingActive || pinPickupActive || pinSetActive || pinCycleActive || homeAdjustActive || fullTestActive || clearAllActive || convTimingActive) {
       stopAllSequences();
       return;
     } else {
@@ -898,7 +922,7 @@ void processCommand(String cmd) {
 
   // Global commands
   if (cmd == "x" || cmd == "stop") {
-    if (sweepClearActive || pinDropActive || turretLoadActive || homingActive || pinPickupActive || pinSetActive || pinCycleActive || homeAdjustActive || fullTestActive || clearAllActive) {
+    if (sweepClearActive || pinDropActive || turretLoadActive || homingActive || pinPickupActive || pinSetActive || pinCycleActive || homeAdjustActive || fullTestActive || clearAllActive || convTimingActive) {
       stopAllSequences();
       return;
     }
@@ -2534,6 +2558,7 @@ void printSequenceMenu() {
   Serial.println(F("  full (fl) [N]     - Full cycle: load/drop/pickup/set/sweep"));
   Serial.println(F("                      e.g. 'full 10' to run 10 cycles"));
   Serial.println(F("  clear (cl)        - Clear all pins (lane, deck, turret)"));
+  Serial.println(F("  convtime (ct)     - Conveyor timing test"));
   Serial.println(F(""));
   Serial.println(F("  debug (de)        - Show turret load timing data"));
   Serial.println(F("  stop (x/<Enter>)  - Stop running sequence"));
@@ -2581,6 +2606,20 @@ void handleSequenceMenu(String cmd) {
       } else if (seqPrompt == SEQPROMPT_TL_TIMING) {
         seqPrompt = SEQPROMPT_NONE;
         printTurretLoadTiming();
+      } else if (seqPrompt == SEQPROMPT_CT_PRECLEAR) {
+        // Start clearing immediately; FSM will prompt "Ready?" when done
+        seqPrompt = SEQPROMPT_NONE;
+        Serial.println(F(""));
+        Serial.println(F(">> Clearing all pins..."));
+        convTimingActive = true;
+        startClearAll();
+        convTimingPhase = CTIME_PRECLEAR;
+      } else if (seqPrompt == SEQPROMPT_CT_READY) {
+        seqPrompt = SEQPROMPT_NONE;
+        startConveyorTiming();
+      } else if (seqPrompt == SEQPROMPT_CT_RAWTIMING) {
+        seqPrompt = SEQPROMPT_NONE;
+        printTurretLoadTiming();
       }
     } else if (cmd == "n" || cmd == "no") {
       if (seqPrompt == SEQPROMPT_PD_PRECLEAR) {
@@ -2616,6 +2655,16 @@ void handleSequenceMenu(String cmd) {
         seqPrompt = SEQPROMPT_NONE;
         Serial.println(F(">> Full test cancelled"));
       } else if (seqPrompt == SEQPROMPT_TL_TIMING) {
+        seqPrompt = SEQPROMPT_NONE;
+        Serial.println(F(">> Timing data kept. Use 'debug' to view later."));
+      } else if (seqPrompt == SEQPROMPT_CT_PRECLEAR) {
+        seqPrompt = SEQPROMPT_CT_READY;
+        Serial.println(F(""));
+        Serial.println(F("Ready to begin the conveyor timing test? (Y/n)"));
+      } else if (seqPrompt == SEQPROMPT_CT_READY) {
+        seqPrompt = SEQPROMPT_NONE;
+        Serial.println(F(">> Conveyor timing test cancelled"));
+      } else if (seqPrompt == SEQPROMPT_CT_RAWTIMING) {
         seqPrompt = SEQPROMPT_NONE;
         Serial.println(F(">> Timing data kept. Use 'debug' to view later."));
       }
@@ -2719,6 +2768,26 @@ void handleSequenceMenu(String cmd) {
   }
   else if (cmd == "debug" || cmd == "de") {
     printTurretLoadTiming();
+  }
+  else if (cmd == "convtime" || cmd == "ct") {
+    if (anySequenceRunning()) {
+      Serial.println(F(">> A sequence is already running. Stop it first (x)."));
+      return;
+    }
+    Serial.println(F(""));
+    Serial.println(F("===== CONVEYOR TIMING TEST ====="));
+    Serial.println(F("This test measures your conveyor belt timing and IR sensor"));
+    Serial.println(F("sensitivity by loading the turret with 10 pins."));
+    Serial.println(F(""));
+    Serial.println(F("INSTRUCTIONS:"));
+    Serial.println(F("  You will need to manually load pins at the base of the"));
+    Serial.println(F("  conveyor onto consecutive conveyor doors. Have pins ready"));
+    Serial.println(F("  so every door has a pin. If you miss a door, try to minimize"));
+    Serial.println(F("  how many get missed - consecutive loading gives the best data."));
+    Serial.println(F("================================"));
+    Serial.println(F(""));
+    seqPrompt = SEQPROMPT_CT_PRECLEAR;
+    Serial.println(F("Run a full clear first to empty everything? (Y/n)"));
   }
   else {
     Serial.print(F("Unknown: "));
@@ -3108,7 +3177,7 @@ void runTurretLoadFSM() {
   unsigned long now = millis();
 
   // IR debounce (runs during catching phases, including waiting for 10th pin)
-  if (turretLoadPhase >= TLOAD_WAIT_CATCH && turretLoadPhase <= TLOAD_WAIT_TENTH) {
+  if (turretLoadPhase >= TLOAD_WAIT_CATCH && turretLoadPhase <= TLOAD_TENTH_SETTLE) {
     int raw = digitalRead(IR_SENSOR_PIN);
 
     // Raw IR timing (no debounce — stores every transition for later output)
@@ -3558,7 +3627,7 @@ void runTurretLoadFSM() {
       turretLoadPhase = TLOAD_IDLE;
       Serial.println(F(">> Turret load sequence COMPLETE"));
       Serial.println(F("   10 pins loaded and released to deck"));
-      if (tlTimingLogCount > 0) {
+      if (tlTimingLogCount > 0 && !convTimingActive) {
         seqPrompt = SEQPROMPT_TL_TIMING;
         Serial.println(F("Display IR sensor and turret timing diagnostic data? (y/N)"));
       }
@@ -4011,6 +4080,513 @@ void runClearAllFSM() {
     default:
       break;
   }
+}
+
+// =====================================================
+// CONVEYOR TIMING TEST
+// =====================================================
+
+void startConveyorTiming() {
+  convTimingActive = true;
+
+  // Clear timing log for fresh data
+  tlTimingLogCount = 0;
+  tlTimingLogHead = 0;
+  tlTimingPinCount = 0;
+  tlTimingLoadNum = 0;
+
+  // Force fresh turret load
+  turretPinsLoaded = 0;
+
+  Serial.println(F(""));
+  Serial.println(F(">> Starting conveyor timing test..."));
+  Serial.println(F("   Starting turret load. Load pins onto consecutive conveyor doors!"));
+  startTurretLoad();
+  convTimingPhase = CTIME_WAIT_LOAD;
+}
+
+void runConvTimingFSM() {
+  if (!convTimingActive) return;
+
+  switch (convTimingPhase) {
+    case CTIME_PRECLEAR:
+      convTimingPhase = CTIME_WAIT_PRECLEAR;
+      break;
+
+    case CTIME_WAIT_PRECLEAR:
+      if (!clearAllActive) {
+        Serial.println(F("   Clear complete."));
+        Serial.println(F(""));
+        seqPrompt = SEQPROMPT_CT_READY;
+        Serial.println(F("Ready to begin the conveyor timing test? (Y/n)"));
+        convTimingPhase = CTIME_IDLE;
+      }
+      break;
+
+    case CTIME_WAIT_LOAD:
+      if (!turretLoadActive) {
+        convTimingPhase = CTIME_DONE;
+      }
+      break;
+
+    case CTIME_DONE:
+      printConveyorTimingAnalysis();
+      convTimingActive = false;
+      convTimingPhase = CTIME_IDLE;
+      if (tlTimingLogCount > 0) {
+        seqPrompt = SEQPROMPT_CT_RAWTIMING;
+        Serial.println(F("Show raw IR timing log? (y/N)"));
+      }
+      break;
+
+    default:
+      break;
+  }
+}
+
+void printConveyorTimingAnalysis() {
+  if (tlTimingLogCount == 0) {
+    Serial.println(F("   No IR events recorded - cannot analyze."));
+    return;
+  }
+
+  int numEntries = tlTimingLogCount < TL_TIMING_MAX ? tlTimingLogCount : TL_TIMING_MAX;
+  int startIdx = tlTimingLogCount <= TL_TIMING_MAX ? 0 : tlTimingLogHead;
+
+  // --- Identify real pins from raw IR sensor transitions ---
+  // Real pins block the IR sensor for >= 100ms; bounces are < 50ms.
+  // This separates real pins from jitter without relying on CAUGHT
+  // markers, which fire between a pin's detect and clear events and
+  // would split each physical pin's data across two groups.
+  const unsigned long MIN_REAL_BLOCKED_MS = 100;
+
+  unsigned long pinBlockedMs[10];
+  unsigned long pinGapMs[10];
+  unsigned long pinCycleMs[10];
+  int pinBounceCount[10];
+  unsigned long pinDetectMs[10];
+  unsigned long pinClearMs[10];
+  int realPinCount = 0;
+
+  unsigned long lastDetectMs = 0;
+  bool haveDetect = false;
+  int cSinceLastReal = 0;
+
+  for (int i = 0; i < numEntries; i++) {
+    TlTimingEvent &e = tlTimingLog[(startIdx + i) % TL_TIMING_MAX];
+    if (e.type == 'D') {
+      lastDetectMs = e.timeMs;
+      haveDetect = true;
+    } else if (e.type == 'C') {
+      cSinceLastReal++;
+      if (e.durationMs >= MIN_REAL_BLOCKED_MS && realPinCount < 10) {
+        pinDetectMs[realPinCount] = haveDetect ? lastDetectMs : (e.timeMs - e.durationMs);
+        pinClearMs[realPinCount] = e.timeMs;
+        pinBlockedMs[realPinCount] = e.durationMs;
+        pinBounceCount[realPinCount] = cSinceLastReal - 1;
+        realPinCount++;
+        cSinceLastReal = 0;
+      }
+      haveDetect = false;
+    }
+  }
+
+  // Attribute trailing bounces (after last real pin) to last real pin
+  if (realPinCount > 0 && cSinceLastReal > 0) {
+    pinBounceCount[realPinCount - 1] += cSinceLastReal;
+  }
+
+  // Check for trailing detect (e.g., 10th pin still at sensor when turret released)
+  bool haveTrailingDetect = false;
+  unsigned long trailingGapMs = 0;
+  if (haveDetect && realPinCount > 0 && lastDetectMs > pinClearMs[realPinCount - 1]) {
+    haveTrailingDetect = true;
+    trailingGapMs = lastDetectMs - pinClearMs[realPinCount - 1];
+  }
+
+  // Compute gap and cycle per real pin
+  for (int i = 0; i < realPinCount; i++) {
+    if (i == 0) {
+      pinGapMs[i] = 0;
+      pinCycleMs[i] = 0;
+    } else {
+      pinGapMs[i] = pinDetectMs[i] - pinClearMs[i - 1];
+      pinCycleMs[i] = pinGapMs[i] + pinBlockedMs[i];
+    }
+  }
+
+  if (realPinCount == 0) {
+    Serial.println(F("   No pin events detected - cannot analyze."));
+    return;
+  }
+
+  // --- Pass 1: Find baseline cycle time (median) ---
+  // Median is robust to outliers at both ends (anomalously short pins
+  // and jams/pauses). Also collect bounce stats.
+  int totalBounces = 0;
+  int maxBouncesPerPin = 0;
+  unsigned long sortedCycles[9];
+  int cycleCount = 0;
+
+  for (int i = 0; i < realPinCount; i++) {
+    if (pinCycleMs[i] > 0) {
+      sortedCycles[cycleCount++] = pinCycleMs[i];
+    }
+    totalBounces += pinBounceCount[i];
+    if (pinBounceCount[i] > maxBouncesPerPin) maxBouncesPerPin = pinBounceCount[i];
+  }
+  // Insertion sort (max 9 values)
+  for (int i = 1; i < cycleCount; i++) {
+    unsigned long key = sortedCycles[i];
+    int j = i - 1;
+    while (j >= 0 && sortedCycles[j] > key) {
+      sortedCycles[j + 1] = sortedCycles[j];
+      j--;
+    }
+    sortedCycles[j + 1] = key;
+  }
+  unsigned long medianCycle = (cycleCount > 0) ? sortedCycles[cycleCount / 2] : 0;
+
+  // Also compute median blocked time for stuck-pin detection
+  unsigned long sortedBlocked[10];
+  for (int i = 0; i < realPinCount; i++) {
+    sortedBlocked[i] = pinBlockedMs[i];
+  }
+  for (int i = 1; i < realPinCount; i++) {
+    unsigned long key = sortedBlocked[i];
+    int j = i - 1;
+    while (j >= 0 && sortedBlocked[j] > key) {
+      sortedBlocked[j + 1] = sortedBlocked[j];
+      j--;
+    }
+    sortedBlocked[j + 1] = key;
+  }
+  unsigned long medianBlocked = (realPinCount > 0) ? sortedBlocked[realPinCount / 2] : 0;
+
+  // --- Pass 2: Classify each pin ---
+  // Uses median as the baseline (robust to outliers at both ends).
+  //   Jam:     cycle > 3.5x median (long pause, mechanical issue)
+  //   Outlier: cycle < 0.7x median (anomalously fast, sensor edge clip)
+  //   Stuck:   blocked > 3x median blocked (pin stuck at sensor)
+  // Jams, outliers, and stuck pins are excluded from all averages.
+  bool pinIsJam[10];
+  bool pinIsOutlier[10];
+  int jamCount = 0;
+  int outlierCount = 0;
+
+  for (int i = 0; i < realPinCount; i++) {
+    pinIsJam[i] = false;
+    pinIsOutlier[i] = false;
+    if (pinCycleMs[i] > 0 && medianCycle > 0) {
+      float cycleRatio = (float)pinCycleMs[i] / (float)medianCycle;
+      if (cycleRatio >= 3.5) {
+        pinIsJam[i] = true;
+        jamCount++;
+        continue;
+      }
+      if (cycleRatio < 0.7) {
+        pinIsOutlier[i] = true;
+        outlierCount++;
+        continue;
+      }
+    }
+    // Also flag stuck pins: blocked time > 3x the median blocked
+    if (medianBlocked > 0 && pinBlockedMs[i] > (medianBlocked * 3)) {
+      pinIsJam[i] = true;
+      jamCount++;
+    }
+  }
+
+  // --- Pass 3: Compute stats excluding jams and outliers ---
+  unsigned long totalBlocked = 0;
+  unsigned long minBlocked = 999999UL;
+  unsigned long maxBlocked = 0;
+  int validBlockedCount = 0;
+
+  // Classify valid pins: consecutive (<1.6x median cycle) or skipped door
+  int consecutiveCount = 0;
+  unsigned long consecutiveCycleTotal = 0;
+  unsigned long consecutiveGapTotal = 0;
+  unsigned long consecutiveBlockedTotal = 0;
+  unsigned long minConsecutiveGap = 999999UL;
+  unsigned long maxConsecutiveGap = 0;
+  unsigned long minConsecutiveCycle = 999999UL;
+  unsigned long maxConsecutiveCycle = 0;
+  int skippedDoors = 0;
+
+  for (int i = 0; i < realPinCount; i++) {
+    if (pinIsJam[i] || pinIsOutlier[i]) continue;
+
+    totalBlocked += pinBlockedMs[i];
+    if (pinBlockedMs[i] < minBlocked) minBlocked = pinBlockedMs[i];
+    if (pinBlockedMs[i] > maxBlocked) maxBlocked = pinBlockedMs[i];
+    validBlockedCount++;
+
+    if (pinCycleMs[i] > 0 && medianCycle > 0) {
+      float ratio = (float)pinCycleMs[i] / (float)medianCycle;
+      if (ratio < 1.6) {
+        consecutiveCount++;
+        consecutiveCycleTotal += pinCycleMs[i];
+        consecutiveGapTotal += pinGapMs[i];
+        consecutiveBlockedTotal += pinBlockedMs[i];
+        if (pinGapMs[i] < minConsecutiveGap) minConsecutiveGap = pinGapMs[i];
+        if (pinGapMs[i] > maxConsecutiveGap) maxConsecutiveGap = pinGapMs[i];
+        if (pinCycleMs[i] < minConsecutiveCycle) minConsecutiveCycle = pinCycleMs[i];
+        if (pinCycleMs[i] > maxConsecutiveCycle) maxConsecutiveCycle = pinCycleMs[i];
+      } else {
+        // Skipped doors: ratio ~2 = 1 skip, ~3 = 2 skips
+        int missed = (int)(ratio + 0.5) - 1;
+        skippedDoors += missed;
+      }
+    }
+  }
+
+  unsigned long avgBlocked = (validBlockedCount > 0) ? (totalBlocked / validBlockedCount) : 0;
+  unsigned long avgConsecutiveCycle = (consecutiveCount > 0) ? (consecutiveCycleTotal / consecutiveCount) : 0;
+  unsigned long avgConsecutiveGap = (consecutiveCount > 0) ? (consecutiveGapTotal / consecutiveCount) : 0;
+
+  // Conveyor speed calculations using avg consecutive cycle time:
+  //
+  // Units/sec: one chair section averages 7.5 units (alternating 7 and 8).
+  //   speed = 7.5 / (avgCycleMs / 1000) = 7500 / avgCycleMs
+  //
+  // RPM: the full chain is 44 units. One revolution = 44 units.
+  //   rev/sec = speed / 44 = 7500 / (avgCycleMs * 44)
+  //   RPM = rev/sec * 60 = 450000 / (avgCycleMs * 44)
+  //       = 10227.27 / avgCycleMs
+  //
+  // Pins/min: one pin per cycle time, assuming every door loaded.
+  //   pins/min = 60000 / avgCycleMs
+  //   There are 6 chairs per revolution (44 units / ~7.33 avg = 6 chairs).
+  float conveyorSpeed = 0;
+  float conveyorRPM = 0;
+  float pinsPerMinute = 0;
+  if (avgConsecutiveCycle > 0) {
+    conveyorSpeed = 7500.0f / (float)avgConsecutiveCycle;
+    conveyorRPM = 10227.27f / (float)avgConsecutiveCycle;
+    pinsPerMinute = 60000.0f / (float)avgConsecutiveCycle;
+  }
+
+  // --- Print analysis ---
+  Serial.println(F(""));
+  Serial.println(F("======== CONVEYOR TIMING ANALYSIS ========"));
+  Serial.print(F("Pins analyzed: "));
+  Serial.println(realPinCount + (haveTrailingDetect ? 1 : 0));
+  Serial.println(F(""));
+
+  // Per-pin breakdown
+  // Column widths: blocked=5 ("NNNms"), gap=6 ("NNNNms"), cycle=6, bounces=2
+  // Separators: 3 spaces between columns, 4 before bounces
+  Serial.println(F("Per-pin breakdown:"));
+  Serial.println(F("         blocked     gap    cycle  bounces"));
+  for (int i = 0; i < realPinCount; i++) {
+    Serial.print(F("  Pin "));
+    if (i + 1 < 10) Serial.print(F(" "));
+    Serial.print(i + 1);
+    Serial.print(F(":  "));
+    // Blocked: 3-digit + "ms" = 5 chars (values always >= 100)
+    Serial.print(pinBlockedMs[i]);
+    Serial.print(F("ms"));
+    // Gap: 3-space sep + right-justified 4-digit + "ms" or "   ---"
+    Serial.print(F("   "));
+    if (pinGapMs[i] > 0) {
+      if (pinGapMs[i] < 1000) Serial.print(F(" "));
+      Serial.print(pinGapMs[i]);
+      Serial.print(F("ms"));
+    } else {
+      Serial.print(F("   ---"));
+    }
+    // Cycle: 3-space sep + right-justified 4-digit + "ms" or "   ---"
+    Serial.print(F("   "));
+    if (pinCycleMs[i] > 0) {
+      if (pinCycleMs[i] < 1000) Serial.print(F(" "));
+      Serial.print(pinCycleMs[i]);
+      Serial.print(F("ms"));
+    } else {
+      Serial.print(F("   ---"));
+    }
+    // Bounces: 4-space sep + right-justified 2-digit
+    Serial.print(F("    "));
+    if (pinBounceCount[i] < 10) Serial.print(F(" "));
+    Serial.print(pinBounceCount[i]);
+    // Note: non-consecutive or JAM
+    if (pinIsJam[i]) {
+      Serial.print(F("  JAM"));
+    } else if (pinIsOutlier[i]) {
+      Serial.print(F("  OUTLIER"));
+    } else if (pinCycleMs[i] > 0 && medianCycle > 0) {
+      float ratio = (float)pinCycleMs[i] / (float)medianCycle;
+      if (ratio >= 1.6) {
+        int missed = (int)(ratio + 0.5) - 1;
+        Serial.print(F("  +"));
+        Serial.print(missed);
+        Serial.print(F(" non-consec"));
+      }
+    }
+    Serial.println();
+  }
+  // Trailing detect row (pin detected but not yet cleared when turret released)
+  if (haveTrailingDetect) {
+    Serial.print(F("  Pin "));
+    int tn = realPinCount + 1;
+    if (tn < 10) Serial.print(F(" "));
+    Serial.print(tn);
+    Serial.print(F(":  "));
+    Serial.print(F("  ---"));
+    Serial.print(F("   "));
+    if (trailingGapMs < 1000) Serial.print(F(" "));
+    Serial.print(trailingGapMs);
+    Serial.print(F("ms"));
+    Serial.println(F("      ---"));
+  }
+  if (skippedDoors > 0 || jamCount > 0 || outlierCount > 0) {
+    if (skippedDoors > 0) Serial.println(F("  (+N non-consec = N empty conveyor doors before this pin)"));
+    if (jamCount > 0) Serial.println(F("  (JAM = pause/jam detected, excluded from averages)"));
+    if (outlierCount > 0) Serial.println(F("  (OUTLIER = anomalous cycle time, excluded from averages)"));
+  }
+
+  // Summary
+  Serial.println(F(""));
+  Serial.println(F("--- Summary ---"));
+
+  Serial.print(F("  Avg blocked time:       "));
+  Serial.print(avgBlocked);
+  Serial.print(F("ms ("));
+  Serial.print(minBlocked);
+  Serial.print(F("-"));
+  Serial.print(maxBlocked);
+  Serial.print(F("ms)"));
+  if (avgBlocked >= 150 && avgBlocked <= 350) {
+    Serial.println(F("   [GOOD]"));
+  } else if (avgBlocked > 350) {
+    Serial.println(F("   [SLOW]"));
+  } else if (avgBlocked < 150) {
+    Serial.println(F("   [FAST]"));
+  }
+
+  if (avgConsecutiveCycle > 0) {
+    Serial.print(F("  Avg gap time:           "));
+    Serial.print(avgConsecutiveGap);
+    Serial.print(F("ms ("));
+    Serial.print(minConsecutiveGap);
+    Serial.print(F("-"));
+    Serial.print(maxConsecutiveGap);
+    Serial.println(F("ms)"));
+
+    Serial.print(F("  Avg cycle time:         "));
+    Serial.print(avgConsecutiveCycle);
+    Serial.print(F("ms ("));
+    Serial.print(minConsecutiveCycle);
+    Serial.print(F("-"));
+    Serial.print(maxConsecutiveCycle);
+    Serial.print(F("ms)"));
+    // Show count when some valid pins were non-consecutive (skipped doors)
+    if (consecutiveCount < cycleCount - jamCount - outlierCount) {
+      Serial.print(F(" ["));
+      Serial.print(consecutiveCount);
+      Serial.print(F(" consec. pins]"));
+    }
+    Serial.println(F(""));
+
+    // Cycle time assessment
+    Serial.print(F("  Conveyor speed:         ~"));
+    Serial.print(conveyorSpeed, 1);
+    Serial.println(F(" links+doors/sec"));
+
+    Serial.print(F("  Conveyor RPM:           ~"));
+    Serial.print(conveyorRPM, 1);
+    Serial.println(F(" (6 pins per revolution)"));
+
+    Serial.print(F("  Pins per minute:        ~"));
+    Serial.print(pinsPerMinute, 1);
+    Serial.println(F(" (if every door loaded)"));
+  }
+
+  if (skippedDoors > 0) {
+    Serial.print(F("  Skipped conveyor doors: ~"));
+    Serial.println(skippedDoors);
+  }
+
+  if (jamCount > 0) {
+    Serial.print(F("  Jams/pauses detected:   "));
+    Serial.print(jamCount);
+    Serial.println(F("  (excluded from averages)"));
+  }
+
+  if (outlierCount > 0) {
+    Serial.print(F("  Timing outliers:        "));
+    Serial.print(outlierCount);
+    Serial.println(F("  (excluded from averages)"));
+  }
+
+  Serial.print(F("  IR bounces:             "));
+  Serial.print(totalBounces);
+  Serial.print(F(" total, "));
+  Serial.print(maxBouncesPerPin);
+  Serial.print(F(" max/pin"));
+  if (maxBouncesPerPin == 0) {
+    Serial.println(F("   [IDEAL]"));
+  } else if (maxBouncesPerPin < 3) {
+    Serial.println(F("   [GOOD]"));
+  } else if (maxBouncesPerPin <= 6) {
+    Serial.println(F("   [MINOR]"));
+  } else {
+    Serial.println(F("   [HIGH]"));
+  }
+
+  // Reference ranges
+  Serial.println(F(""));
+  Serial.println(F("--- Reference ---"));
+  Serial.println(F("  Blocked time:  150-350ms  (pin passing IR sensor)"));
+  Serial.println(F("  Cycle time:    varies by machine (motor speed, chain gearing)"));
+  Serial.println(F("  Note: The conveyor chain alternates 7-unit and 8-unit chair"));
+  Serial.println(F("  sections, so ~14% variation between consecutive pins is normal."));
+  Serial.println(F("  Bounces:       <5 per pin is normal"));
+
+  // Recommendations
+  Serial.println(F(""));
+  Serial.println(F("--- Recommendations ---"));
+  bool allGood = true;
+
+  if (avgBlocked > 350) {
+    Serial.println(F("  * Pins are slow past the sensor. Check belt tension, rollers,"));
+    Serial.println(F("    and motor. Or IR sensor may need repositioning."));
+    allGood = false;
+  }
+  if (avgBlocked < 150 && avgBlocked > 0) {
+    Serial.println(F("  * Pins are unusually fast past the sensor. Verify the IR"));
+    Serial.println(F("    sensor is positioned correctly and pins are being detected."));
+    allGood = false;
+  }
+  if (maxBouncesPerPin >= 7) {
+    Serial.println(F("  * High IR bounce count on one or more pins. Check IR sensor"));
+    Serial.println(F("    alignment, wiring, and that pins pass cleanly through the beam."));
+    allGood = false;
+  }
+  if (outlierCount > 0) {
+    Serial.println(F("  * Timing outlier(s) detected — one or more pins had an"));
+    Serial.println(F("    anomalously short cycle time. This usually means a pin"));
+    Serial.println(F("    clipped the edge of the IR beam. If this happens often,"));
+    Serial.println(F("    check IR sensor alignment."));
+    allGood = false;
+  }
+  if (skippedDoors > 2) {
+    Serial.println(F("  * Several conveyor doors were missed. For best results,"));
+    Serial.println(F("    re-run the test loading pins on every consecutive door."));
+    allGood = false;
+  }
+  if (jamCount > 0) {
+    Serial.println(F("  * Jams or pauses were detected during loading. Check for"));
+    Serial.println(F("    obstructions, bent conveyor doors, or pins getting stuck."));
+    Serial.println(F("    Jam data was excluded from the timing averages above."));
+    allGood = false;
+  }
+  if (allGood) {
+    Serial.println(F("  Conveyor timing and IR sensor look normal!"));
+  }
+
+  Serial.println(F("=========================================="));
+  Serial.println(F(""));
 }
 
 // =====================================================

@@ -9,6 +9,8 @@ All notable changes to the Master Test Script will be documented in this file.
 - **Full test cycle count**: `full 10` / `fl 30` auto-stops after N cycles. Displays progress as "Cycle 3 of 10". Still cancellable early with `x`/Enter.
 - **Concurrent sequence guard**: All sequence commands now prevent starting while another is running.
 - **Deck LEDs on during full test**: White on start, off on stop/completion.
+- **Conveyor timing test** (`convtime` / `ct` from sequence menu): Guided diagnostic that loads 10 pins from the conveyor and produces a full timing analysis — per-pin blocked/gap/cycle breakdown, conveyor speed (links/sec), RPM, pins/min, IR bounce stats, jam/outlier detection, and actionable recommendations. Optionally runs a full clear first. Uses median-based statistics to handle outliers and jams.
+- **Timing data suppressed during conveyor timing**: Turret load's timing prompt is suppressed when running inside a conveyor timing test to avoid double-prompting; the conveyor timing test shows its own analysis and offers the raw log separately.
 
 ### Changed
 - **Conveyor timing**: Catch delay now starts from pin detection time rather than queue consumption, preventing cumulative drift.
@@ -18,6 +20,7 @@ All notable changes to the Master Test Script will be documented in this file.
 ### Config
 - Added `TURRET_VERIFY_TOLERANCE` (default 20) to `general_config.h` and config-tool
 - Added timing documentation to `DEBOUNCE_MS`, `CATCH_DELAY_MS`, and `TLOAD_ARM_DELAY_MS` comments
+- **IR debounce extended through ninth settle**: IR debounce and raw timing now run through `TLOAD_TENTH_SETTLE` phase (was stopping at `TLOAD_WAIT_TENTH`), ensuring consistent timing data capture for the full load sequence.
 
 ## [v1.2.4] - 2026-03-05
 
