@@ -35,7 +35,7 @@
 #endif
 
 // Current version, will be used by Scoremore to determine supported features
-#define VERSION "1.2.4"
+#define VERSION "1.3.0"
 
 Adafruit_NeoPixel deckL(DECK_LED_LENGTH_L, DECK_PIN_L, NEO_GRB + NEO_KHZ800);
 Adafruit_NeoPixel deckR(DECK_LED_LENGTH_R, DECK_PIN_R, NEO_GRB + NEO_KHZ800);
@@ -148,6 +148,17 @@ bool strikeLightOn=false, strikeEdgeLatched=false, strikeDetected=false;
 
 // Reset button
 bool pinsetterResetRequested=false;
+unsigned long resetBtnPressTime = 0;
+bool resetBtnPressed = false;
+bool resetBtnHeld    = false;
+bool resetBtnHandled = false;
+bool maintenanceMode = false;
+
+// Pre-declare lane reset button functions
+void delayWithResetButtonCheck(unsigned long delayMs);
+void resetButtonHandler(int btnState);
+void triggerLaneReset(bool scoreMoreHandlesReset);
+void enterMaintenanceMode();
 
 // ===== Fill-ball (ScoreMore logical pin 7) =====
 bool autoResetFillBall = false;
@@ -164,6 +175,10 @@ AccelStepper stepper1(1, STEP_PIN, DIR_PIN);
 bool ninthSettleActive=false, catchDelayActive=false, releaseDwellActive=false;
 unsigned long ninthSettleStart=0, catchDelayStart=0, releaseDwellStart=0;
 
+// Conveyor-pause timer freeze: when conveyor stops mid-catch, freeze the
+// catch delay / ninth settle timers so pins have time to reach the slot.
+unsigned long lastRunTurretMs=0;
+
 // Pin positions
 const int PinPositions[]={PIN_POS_0, PIN_POS_1, PIN_POS_2, PIN_POS_3, PIN_POS_4, PIN_POS_5, PIN_POS_6, PIN_POS_7, PIN_POS_8, PIN_POS_9, PIN_POS_10};
 static inline long Pin10ReleasePos(){ return PinPositions[10] + TURRET_PIN10_RELEASE_OFFSET; }
@@ -177,9 +192,53 @@ bool emptyTurretReturnActive = false;   // true only while EmptyTurret is return
 int queuedPinEvents = 0;
 
 int irStableState=HIGH, irLastRead=HIGH; unsigned long irLastChange=0; bool pinEdgeArmed=true;
+unsigned long queuedPinDetectMs=0;  // millis() when the queued pin was first detected
 
-bool turretReleaseRequested=false, turretFillTo9Requested=false;
+// DEBUG: IR jitter episode tracking (Case 1 missed-pin detection)
+bool dbgIrEpisode=false;             // currently tracking an IR activity episode
+unsigned long dbgIrEpStartMs=0;      // when raw first went LOW
+int dbgIrEpToggles=0;                // raw transition count during episode
+bool dbgIrEpConfirmed=false;         // did irStableState go LOW during episode?
+
+// DEBUG: Conveyor/IR timing (real-time serial output, mirrors Master_Test buffered log)
+bool dbgTimingBlocked=false;
+unsigned long dbgTimingBlockStart=0;
+unsigned long dbgTimingLastClear=0;
+int dbgTimingPinCount=0;
+
+// DEBUG: ring buffer for turret/IR debug messages (replaces live serial output)
+// Memory usage: DBG_RING_SIZE * DBG_LINE_LEN bytes of SRAM (100 * 48 = 4800 bytes).
+// Arduino Mega 2560 has 8192 bytes SRAM total. Reduce DBG_RING_SIZE if low on memory.
+#define DBG_RING_SIZE 100
+#define DBG_LINE_LEN  48
+char dbgRing[DBG_RING_SIZE][DBG_LINE_LEN];
+int dbgRingHead = 0;   // next write position
+int dbgRingCount = 0;  // number of items stored
+
+void dbgLog(const char* msg) {
+  strncpy(dbgRing[dbgRingHead], msg, DBG_LINE_LEN - 1);
+  dbgRing[dbgRingHead][DBG_LINE_LEN - 1] = '\0';
+  dbgRingHead = (dbgRingHead + 1) % DBG_RING_SIZE;
+  if (dbgRingCount < DBG_RING_SIZE) dbgRingCount++;
+}
+
+void dbgDump() {
+  if (dbgRingCount == 0) {
+    Serial.println(F("(no debug data)"));
+    return;
+  }
+  int start = (dbgRingHead - dbgRingCount + DBG_RING_SIZE) % DBG_RING_SIZE;
+  for (int i = 0; i < dbgRingCount; i++) {
+    int idx = (start + i) % DBG_RING_SIZE;
+    Serial.print(F("DEBUG:"));
+    Serial.println(dbgRing[idx]);
+  }
+}
+
+bool turretReleaseRequested=false, turretFillTo9Requested=false, tenthPinReady=false;
 bool conveyorLockedByDwell=false, suspendConveyorUntilHomeDone=false;
+bool releaseHeadStartActive=false;
+unsigned long releaseHeadStartMs=0;
 
 unsigned long lastPinCatchMs = 0;
 
@@ -221,7 +280,6 @@ void runSequence(); unsigned long stepDuration(int idx);
 void DeckUp(); void DeckPinSet(); void DeckPinGrab(); void DeckPinDrop();
 void SlidingDeckRelease(); void SlidingDeckHome(); void ScissorsGrab(); void ScissorsDrop();
 void SweepGuard(); void SweepUp(); void SweepBack();
-void StrikeSweepClearLane();
 void checkSerial(); void handleCommand(String cmd); void checkInputChanges();
 bool isTrackedInput(int pin); void removeInputPin(int pin);
 int resolveArduinoPin(int scoreMorePin); int getScoreMorePin(int arduinoPin); bool isBowlingPin(int scoreMorePin);
@@ -258,8 +316,11 @@ bool conesFullHold=false;
 bool conesFullHoldArmed=false;
 unsigned long conesFullHoldStartMs=0;
 
-bool postSetResumeDelayActive = false;
-unsigned long postSetResumeStart = 0;
+// DISABLED: postSetResumeDelay paused conveyor for 2s after deck-up during pin set.
+// This could strand a pin mid-transit on the conveyor belt, causing the catch delay
+// to expire before the pin reached the turret slot.
+// bool postSetResumeDelayActive = false;
+// unsigned long postSetResumeStart = 0;
 
 // ---- PAUSE FOR SCOREMORE IF SCOREMORE_USER = 1 ----
 bool waitForScoreMore(){
@@ -283,6 +344,11 @@ bool waitForScoreMore(){
 void setup(){
   ledsBegin();
   pinMode(PINSETTER_RESET_PIN, INPUT_PULLUP);
+
+  #ifdef STEPPER_ENABLE_PIN
+  pinMode(STEPPER_ENABLE_PIN,OUTPUT);digitalWrite(STEPPER_ENABLE_PIN,LOW);
+  #endif
+
   // Frame LEDs
   pinMode(FRAME_LED1_PIN, OUTPUT);
   pinMode(FRAME_LED2_PIN, OUTPUT);
@@ -306,20 +372,26 @@ void setup(){
 
   stepper1.setMaxSpeed(TURRET_NORMAL_MAXSPEED);
   stepper1.setAcceleration(TURRET_NORMAL_ACCEL);
+  #ifdef STEPPER_ENABLE_PIN
+  stepper1.setEnablePin(STEPPER_ENABLE_PIN);
+  #endif
+  // true = invert the enable pin (standard for stepsticks where LOW = on, HIGH = off)
+  stepper1.setPinsInverted(false, false, true);
+  stepper1.enableOutputs();
 
   LeftRaiseServo.attach(RAISE_LEFT_PIN);
   RightRaiseServo.attach(RAISE_RIGHT_PIN);
   ScissorsServo.attach(SCISSOR_PIN);
   
-  DeckPinDrop(); delay(1000);
-  ScissorsGrab(); delay(1000);
-  ScissorsDrop(); delay(1000);
+  DeckPinDrop(); delayWithResetButtonCheck(1000);
+  ScissorsGrab(); delayWithResetButtonCheck(1000);
+  ScissorsDrop(); delayWithResetButtonCheck(1000);
 
   BallReturnServo.attach(BALL_RETURN_PIN);
-  DeckUp(); delay(1000);
+  DeckUp(); delayWithResetButtonCheck(1000);
   
   BallReturnClosed(); brState=BR_IDLE_CLOSED; brStateStart=millis();
-  delay(1000);
+  delayWithResetButtonCheck(1000);
 
   LeftSweepServo.attach(LEFT_SWEEP_PIN);
   RightSweepServo.attach(RIGHT_SWEEP_PIN);
@@ -335,10 +407,12 @@ void setup(){
   irLastRead    = digitalRead(IR_SENSOR_PIN);
   irStableState = irLastRead;
   irLastChange  = millis();
+  dbgTimingBlocked = (irLastRead == LOW);
   if (irStableState == LOW) {
     // Beam is already blocked at boot -> treat as one pin event
     pinEdgeArmed     = false;
     queuedPinEvents += 1;
+    queuedPinDetectMs = millis();
   } else {
     pinEdgeArmed = true;
   }
@@ -351,9 +425,11 @@ void setup(){
   lastPinCatchMs = millis();
 
   // Initial home (blocking only here)
+  lastRunTurretMs = millis();
   startHomeTurret();
+  Serial.println("LOG: starting Turret Homing");
   while(homingActive){
-    runTurret(); updateConveyorOutput(); updateBallReturnDoor(); updateSweepTween(); laneUpdate(); delay(1);
+    runTurret(); updateConveyorOutput(); updateBallReturnDoor(); updateSweepTween(); laneUpdate(); delayWithResetButtonCheck(1);
   }
 
   NowCatching=1; goTo(PinPositions[1]); loadedCount=0;
@@ -372,11 +448,23 @@ void setup(){
   lastBallActivityMs = millis();
 
   updateFrameLEDs();
+  pinsetterResetRequested=false;  // ignore any reset requests that might come in during startup
 }
 
 // ======================= LOOP =======================
 void loop(){
   unsigned long now=millis();
+  // if in maintenance mode don't do anything in the loop, just check for reset button activity
+  if(maintenanceMode){
+    static bool mainLoopWarned = false;
+    if(!mainLoopWarned){
+      Serial.println(F("WARNING: loop() reached while in maintenance mode"));
+      mainLoopWarned = true;
+    }
+    delay(10);
+    resetButtonHandler(-1);
+    return;
+  }
 
   updateSweepTween();
   runTurret();
@@ -449,6 +537,7 @@ void loop(){
      runSequence();
   } else {
     if(pinsetterResetRequested) {  //if the reset button has been pressed and no other sequences are queued
+      dbgDump();
       stepIndex=22;       //trigger reset of the lane
       pinsetterResetRequested=false;
     }
@@ -472,29 +561,41 @@ void runSequence(){
   if(stepIndex==1){
     if(strikeDetected){
       scoreWindowActive=false;
-      Serial.println("STRIKE@STEP1");
-      ScissorsDrop();
-      StrikeSweepClearLane();
-      strikePending=true; startStrikeWipe();
-      strikeDetected=false; strikeEdgeLatched=false; strikeLightOn=false;
-
-      stepIndex=30; prevStepMillis=millis(); return;
+      Serial.println(F("STRIKE@STEP1"));
+      ScissorsDrop(); SweepGuard();
+      stepIndex=11; prevStepMillis=millis(); return;
     }
     SweepGuard();
   }
-  else if(stepIndex==2){
-    if(refillInProgress()){
-      backgroundRefillRequested=true;
-      if(loadedCount==9 && deckIsUp) startTurretReleaseCycle();
-      prevStepMillis=millis(); return;
-    }
-    DeckPinGrab();
+
+  // ---------- Strike sweep (non-blocking) ----------
+  else if(stepIndex==12){ SweepBack(); onSweepBackDoorHoldStart(); }
+  else if(stepIndex==13){ SweepGuard(); }
+  else if(stepIndex==14){
+    strikePending=true; startStrikeWipe();
+    strikeDetected=false; strikeEdgeLatched=false; strikeLightOn=false;
+    stepIndex=30; prevStepMillis=millis(); return;
   }
+  // The throw-1 sequence proceeds while the turret loads in the background.
+  // If the turret finishes and detects the 10th pin while the deck is down,
+  // it holds at slot 9 until the deck comes back up (see tenthPinReady trigger
+  // in runTurret). The 10th pin release can fire during steps 4-6 while the
+  // deck is up. Step 7 gates on dwell completion so the deck doesn't lower
+  // while pins are still falling from the turret onto the sliding deck.
+  // If still loading by step 30, the normal startTurretReleaseCycle + step 31
+  // wait handles it.
+  else if(stepIndex==2){ DeckPinGrab(); }
   else if(stepIndex==3){ ScissorsGrab(); }
   else if(stepIndex==4){ DeckUp(); }
   else if(stepIndex==5){ SweepBack(); onSweepBackDoorHoldStart(); }
   else if(stepIndex==6){ SweepGuard(); }
-  else if(stepIndex==7){ scoreWindowActive=false; DeckPinDrop(); }
+  else if(stepIndex==7){
+    // Don't lower the deck while turret is releasing pins onto the sliding deck.
+    // The 10th pin release can fire during steps 4-6 (turret loads concurrently
+    // with throw-1). Wait for dwell to complete before moving the raise deck.
+    if(turretReleaseRequested && !dropCycleJustFinished){ prevStepMillis=millis(); return; }
+    scoreWindowActive=false; DeckPinDrop();
+  }
   else if(stepIndex==8){ ScissorsDrop(); }
   else if(stepIndex==9){ DeckUp(); }
   else if(stepIndex==10){
@@ -530,8 +631,9 @@ void runSequence(){
   else if(stepIndex==34){
     DeckUp();
 
-    postSetResumeDelayActive = true;
-    postSetResumeStart = millis();
+    // DISABLED: was pausing conveyor for 2s after deck-up
+    // postSetResumeDelayActive = true;
+    // postSetResumeStart = millis();
 
     refillLockActive=true;
     backgroundRefillRequested=true;
@@ -566,6 +668,7 @@ void runSequence(){
 
 unsigned long stepDuration(int idx){
   if(idx==1)  return 3000;
+  if(idx>=11 && idx<=13) return STRIKE_SWEEP_PAUSE_MS;
   if(idx==22) return 3000;
   if(idx==31) return 0;
   return 1000;
@@ -612,12 +715,6 @@ void SweepGuard(){ sweepPoseTarget = SWEEP_GUARD; startSweepTo(SWEEP_GUARD_ANGLE
 void SweepUp()   { sweepPoseTarget = SWEEP_UP;    startSweepTo(SWEEP_UP_ANGLE, 180-SWEEP_UP_ANGLE, SWEEP_TWEEN_MS); }
 void SweepBack() { sweepPoseTarget = SWEEP_BACK;  startSweepTo(SWEEP_BACK_ANGLE, 180-SWEEP_BACK_ANGLE, SWEEP_TWEEN_MS); }
 
-// ======================= STRIKE SWEEP HELPER =======================
-void StrikeSweepClearLane(){
-  SweepGuard(); waitSweepDone(); pumpAll(STRIKE_SWEEP_PAUSE_MS);
-  SweepBack();  waitSweepDone(); onSweepBackDoorHoldStart(); pumpAll(STRIKE_SWEEP_PAUSE_MS);
-  SweepGuard(); waitSweepDone(); pumpAll(STRIKE_SWEEP_PAUSE_MS);
-}
 
 // ======================= POWER-ON DEMO =======================
 void PowerOnSequence(){
@@ -633,7 +730,6 @@ void PowerOnSequence(){
 
   SweepBack(); waitSweepDone(); pumpAll(400);
   SweepGuard(); waitSweepDone(); pumpAll(400);
-
   EmptyTurret(); pumpAll(600);
 
   DeckPinSet();          pumpAll(800);
@@ -647,7 +743,7 @@ void PowerOnSequence(){
 
 // ======================= PRIME (boot) =======================
 void PrimeFullRackAndSetLaneOnce(){
-  releaseDwellActive=false; turretReleaseRequested=false;
+  releaseDwellActive=false; turretReleaseRequested=false; releaseHeadStartActive=false;
   while(loadedCount<9){
     runTurret(); updateConveyorOutput(); updateBallReturnDoor(); updateSweepTween(); laneUpdate();
     if(millis()-prevScoreMillis>=SCORE_INTERVAL){
@@ -683,6 +779,19 @@ void PrimeFullRackAndSetLaneOnce(){
 
 // ======================= TURRET FSM =======================
 void runTurret(){
+  // Freeze catch/settle timers while conveyor is off. A pin that was detected
+  // at the IR sensor may still be in transit on the conveyor belt. If the
+  // conveyor stops (e.g., conesFullHold, suspendConveyorUntilHomeDone), the pin
+  // won't reach the turret slot until the conveyor resumes. Push timer starts
+  // forward by each loop's elapsed time so they don't expire prematurely.
+  unsigned long now = millis();
+  unsigned long loopDelta = now - lastRunTurretMs;
+  lastRunTurretMs = now;
+  if(!conveyorIsOn && loopDelta > 0){
+    if(catchDelayActive)  catchDelayStart  += loopDelta;
+    if(ninthSettleActive) ninthSettleStart += loopDelta;
+  }
+
   // Background refill priority
   if(backgroundRefillRequested){
     if(loadedCount<9){
@@ -704,7 +813,7 @@ void runTurret(){
   }
 
   if(conesFullHold){
-    if(deckIsUp && deckConeCount<10 && !postSetResumeDelayActive){
+    if(deckIsUp && deckConeCount<10){  // postSetResumeDelay check removed (disabled)
       conesFullHold=false;
       backgroundRefillRequested=true;
       if(loadedCount==9 && !releaseDwellActive){
@@ -726,6 +835,37 @@ void runTurret(){
 
   runHomingFSM();
 
+  // Trigger turret release move when 10th pin was detected and deck is now up.
+  // This handles the case where the 10th pin arrived while the deck was down
+  // (e.g., during the throw #1 grab/sweep/drop sequence). The turret holds at
+  // slot 9 until the deck comes back up and can receive pins.
+  // Release is allowed when:
+  //   - Sliding deck at home/catch position (SLIDER_HOME_ANGLE), AND
+  //   - Idle (stepIndex==0) or reset/set (stepIndex>=30), OR
+  //   - Sliding deck is empty (deckConeCount<10) AND scissors are in grab.
+  //     This catches the throw-1 window (steps 4-6) where the deck is up,
+  //     scissors grabbed pins from the lane, and the sliding deck can safely
+  //     receive turret pins. At step 9 the deck also comes up but scissors
+  //     are in drop position, so the scissors check prevents release there.
+  // The slider check prevents a race where conesFullHold releases between
+  // step 33 (SlidingDeckRelease) and step 35 (SlidingDeckHome), and a
+  // queued 10th pin triggers release while the slider is still extended.
+  if(tenthPinReady && turretReleaseRequested && deckIsUp
+     && !releaseDwellActive && !moving && !homingActive
+     && SlideServo.read()==SLIDER_HOME_ANGLE
+     && (stepIndex==0 || stepIndex>=30
+         || (deckConeCount<10 && ScissorsServo.read()==SCISSOR_GRAB_ANGLE))){
+    releaseHeadStartActive=true;  // delay conveyor resume so turret gets a head start
+    releaseHeadStartMs=millis();
+    goTo(Pin10ReleasePos());
+  }
+
+  // Clear tenthPinReady after head-start delay so conveyor can resume
+  if(releaseHeadStartActive && (millis()-releaseHeadStartMs>=RELEASE_HEAD_START_MS)){
+    releaseHeadStartActive=false;
+    tenthPinReady=false;
+  }
+
   // Start dwell upon arrival at release
   if(!moving && turretReleaseRequested && !releaseDwellActive && (targetPos==Pin10ReleasePos())){
     releaseDwellActive=true; releaseDwellStart=millis();
@@ -734,25 +874,126 @@ void runTurret(){
 
   // IR debounce
   int raw=digitalRead(IR_SENSOR_PIN);
-  if(raw!=irLastRead){ irLastChange=millis(); irLastRead=raw; }
+  if(raw!=irLastRead){
+    // DEBUG: start jitter episode on first raw LOW
+    if(!dbgIrEpisode && raw==LOW){
+      dbgIrEpisode=true; dbgIrEpStartMs=millis();
+      dbgIrEpToggles=0; dbgIrEpConfirmed=false;
+    }
+    if(dbgIrEpisode) dbgIrEpToggles++;
+    irLastChange=millis(); irLastRead=raw;
+  }
+  // DEBUG: raw IR timing output (every raw transition, unfiltered)
+  {
+    bool dbgNowBlocked = (raw == LOW);
+    if(dbgNowBlocked != dbgTimingBlocked){
+      dbgTimingBlocked = dbgNowBlocked;
+      if(dbgNowBlocked){
+        dbgTimingBlockStart = now;
+        dbgTimingPinCount++;
+        { char b[DBG_LINE_LEN];
+          if(dbgTimingPinCount > 1 && dbgTimingLastClear > 0)
+            snprintf(b, sizeof(b), "IR_D pin=%d gap=%lums", dbgTimingPinCount, now - dbgTimingLastClear);
+          else
+            snprintf(b, sizeof(b), "IR_D pin=%d", dbgTimingPinCount);
+          dbgLog(b);
+        }
+      } else {
+        dbgTimingLastClear = now;
+        { char b[DBG_LINE_LEN];
+          snprintf(b, sizeof(b), "IR_C pin=%d blocked=%lums", dbgTimingPinCount, now - dbgTimingBlockStart);
+          dbgLog(b);
+        }
+      }
+    }
+  }
   if((millis()-irLastChange)>DEBOUNCE_MS){
     if(irStableState!=raw) irStableState=raw;
   }
-  if(irStableState==HIGH) pinEdgeArmed=true;
+  // DEBUG: track if debounce confirmed LOW during this episode
+  if(dbgIrEpisode && irStableState==LOW) dbgIrEpConfirmed=true;
+  // DEBUG: end episode when beam fully settled HIGH — report if never confirmed
+  if(dbgIrEpisode && raw==HIGH && irStableState==HIGH
+     && (millis()-irLastChange)>=TLOAD_ARM_DELAY_MS){
+    if(!dbgIrEpConfirmed && dbgIrEpToggles>=2){
+      { char b[DBG_LINE_LEN];
+        snprintf(b, sizeof(b), "IR_JITTER_MISS? togg=%d dur=%lums slot=%d ld=%d arm=%d",
+                 dbgIrEpToggles, millis()-dbgIrEpStartMs, NowCatching, loadedCount, pinEdgeArmed?1:0);
+        dbgLog(b);
+      }
+    }
+    dbgIrEpisode=false;
+  }
+  // ── IR re-arm logic ──────────────────────────────────────
+  // Re-arm when beam has been clear long enough. Two layers
+  // of protection prevent double-counting the caught pin:
+  //
+  //  Layer 1 – DEBOUNCE_MS (50ms): Raw noise filter (above).
+  //    All observed jitter is well under 50ms:
+  //      • Leading-edge bounce: 0–1ms, multiple in same ms
+  //      • Trailing-edge bounce: 0–1ms, right after pin clears
+  //      • Post-clear echo: 27–43ms, ~96–123ms after clear
+  //    None survive the 50ms debounce window.
+  //
+  //  Layer 2 – TLOAD_ARM_DELAY_MS (200ms): Beam must be clear
+  //    at the raw level for 200ms AND irStableState must be HIGH.
+  //    Covers the post-clear echo window (~143ms from clear)
+  //    with ~57ms margin. Echoes reset irLastChange, so the
+  //    200ms countdown restarts; re-arm at ~343ms after clear.
+  //
+  // Real-world pin timing (from Conveyor_Timing sketch, raw unfiltered transitions):
+  //   "Blocked" = time from raw LOW (pin arrives) to raw HIGH (pin clears)
+  //   "Gap"     = edge-to-edge clear time: raw HIGH (prev clears) to raw LOW (next arrives)
+  //   • Blocked duration: 203–331ms (typical ~275–310ms)
+  //   • Gap between consecutive pins: 584–1005ms (typical ~730ms)
+  //   • Time from catch to re-arm: ~525–560ms
+  //     (clear ~300ms + debounce 50ms + arm delay 200ms)
+  //   • Next pin arrives ~430ms after previous clears
+  //     (730ms gap – 300ms blocked)
+  //   • Re-arm happens ~170–205ms before next pin → safe margin
+  //
+  // Previously a third layer suppressed re-arm during the entire
+  // CATCH_DELAY phase. This was removed because it caused missed
+  // detections: pins arriving during the 800ms window would enter
+  // and clear the sensor while re-arm was suppressed, resulting
+  // in double-stacked pins in the turret.
+  //
+  // Ninth-settle suppression is kept because the settle is short
+  // (300ms) and ends with a full debounce state reset.
+  //
+  // tenthPinReady suppression: once the 10th pin is detected, no more
+  // pins are needed. Prevent re-arming to avoid phantom 11th pin events
+  // from conveyor inertia or pin wobble.
+  // ──────────────────────────────────────────────────────────
+  if(irStableState==HIGH
+     && !ninthSettleActive
+     && !homingActive
+     && !tenthPinReady
+     && (millis()-irLastChange) >= TLOAD_ARM_DELAY_MS) {
+    pinEdgeArmed=true;
+  }
 
-  // Queue pin hits whenever we're not in dwell/hold AND not paused (NEW)
+  // Queue pin hits whenever we're not in dwell/hold AND not paused
   if(!pauseMode && !releaseDwellActive && !conesFullHold){
     if(pinEdgeArmed && irStableState==LOW){
       queuedPinEvents++;         // record that one more pin has arrived
+      queuedPinDetectMs = millis();  // record when this pin was detected
       pinEdgeArmed = false;      // wait for beam to clear before next
     }
   }
 
   // Catch delay for 1..8
-  if(catchDelayActive && (millis()-catchDelayStart>=CATCH_DELAY_MS)){
+  // Advance when BOTH conditions are met:
+  //  1. Enough time has elapsed since the pin was detected (CATCH_DELAY_MS)
+  //  2. The pin has cleared the sensor and jitter has settled (irStableState == HIGH)
+  // Normally the pin clears ~300ms after detection and debounce confirms ~350ms,
+  // so condition 2 is satisfied well before condition 1 (800ms). But if a pin
+  // takes unusually long to clear, we wait for it rather than advancing early.
+  if(catchDelayActive && (millis()-catchDelayStart>=CATCH_DELAY_MS) && irStableState==HIGH){
     catchDelayActive=false;
     if(NowCatching>=1 && NowCatching<=8){
       NowCatching++; if(NowCatching>9) NowCatching=9;
+      { char b[DBG_LINE_LEN]; snprintf(b, sizeof(b), "ADVANCE slot=%d", NowCatching); dbgLog(b); }
       goTo(PinPositions[NowCatching]);
     }
   }
@@ -760,11 +1001,29 @@ void runTurret(){
   // 9th settle
   if(ninthSettleActive && (millis()-ninthSettleStart>=NINTH_SETTLE_MS)){
     ninthSettleActive=false;
+
+    // Re-sync debounce state so arm delay starts from clean baseline.
+    // Do NOT proactively queue based on raw LOW — 300ms (NINTH_SETTLE_MS)
+    // may not be enough for the 9th pin to fully clear the beam, and a
+    // LOW reading here could be the 9th pin still settling rather than a
+    // genuine 10th pin (see Bug 6 in IR_BUG_FIXES.md). The normal
+    // arm-delay mechanism will detect the 10th pin once the beam clears.
+    int rawNow = digitalRead(IR_SENSOR_PIN);
+    pinEdgeArmed = false;
+    irLastRead = rawNow;
+    irStableState = rawNow;
+    irLastChange = millis();
+    dbgIrEpisode = false;  // DEBUG: reset jitter tracker on state sync
+    dbgTimingBlocked = (rawNow == LOW);  // DEBUG: sync timing tracker
   }
 
   // Finish dwell (10th dropped)
   if(releaseDwellActive && (millis()-releaseDwellStart>=RELEASE_DWELL_MS)){
+    dbgLog("TURRET_RELEASED");
+    dbgTimingPinCount=0;
     releaseDwellActive=false;
+    tenthPinReady=false;
+    releaseHeadStartActive=false;
 
     loadedCount=0; NowCatching=1;
     startHomeTurret(); postDropHomePending=true;
@@ -803,10 +1062,16 @@ void onPinDetected(){
 
   if(loadedCount<9){
     loadedCount++;
+    { char b[DBG_LINE_LEN]; snprintf(b, sizeof(b), "PIN_CAUGHT %d/9", loadedCount); dbgLog(b); }
     if(NowCatching>=1 && NowCatching<=8){
-      catchDelayActive=true; catchDelayStart=millis();
+      // Catch delay timer starts from when the pin was DETECTED at the
+      // sensor, not when the queue is consumed. This prevents cumulative
+      // drift when pins arrive during a previous catch delay or while
+      // the turret is advancing. The irStableState==HIGH gate on the
+      // catch delay exit ensures we don't advance until the pin clears.
+      catchDelayActive=true; catchDelayStart=queuedPinDetectMs;
     }else{
-      ninthSettleActive=true; ninthSettleStart=millis();
+      ninthSettleActive=true; ninthSettleStart=queuedPinDetectMs;
       if(deckConeCount==10){
         conesFullHoldArmed=true;
         conesFullHoldStartMs=millis();
@@ -821,10 +1086,23 @@ void onPinDetected(){
       pinEdgeArmed=false;
       return;
     }
-    if( (turretReleaseRequested || (deckIsUp && backgroundRefillRequested)) ){
-      turretReleaseRequested=true; goTo(Pin10ReleasePos()); return;
+    // 10th pin detected. If the deck is up and ready to receive, release
+    // immediately. Otherwise defer: set tenthPinReady so the conveyor stops
+    // and IR re-arming is suppressed until the deferred trigger in
+    // runTurret() can start the move.
+    // "Ready to receive" means sliding deck at home/catch AND either
+    // idle/reset OR the sliding deck is empty with scissors in grab
+    // (e.g., during throw-1 steps 4-6).
+    dbgLog("PIN_10_DETECTED");
+    turretReleaseRequested=true;
+    if(deckIsUp && SlideServo.read()==SLIDER_HOME_ANGLE
+                && (stepIndex==0 || stepIndex>=30
+                    || (deckConeCount<10 && ScissorsServo.read()==SCISSOR_GRAB_ANGLE))){
+      goTo(Pin10ReleasePos());
+    } else {
+      tenthPinReady=true;
     }
-    pinEdgeArmed=false; return;
+    return;
   }
 }
 
@@ -895,15 +1173,29 @@ void runHomingFSM(){
 
       if(postDropHomePending){
         turretReleaseRequested=false;
+        tenthPinReady=false;
+        releaseHeadStartActive=false;
         postDropHomePending=false;
       }
 
-      // Sync IR debounce state to current sensor and avoid fake "new pin"
+      // Discard any stale pin events from before homing (e.g., an 11th pin
+      // detected during the move-to-release window while conveyor was still on).
+      // Master_Test does the same: tlQueuedPins=0 at homing complete.
+      queuedPinEvents = 0;
+
+      // Sync IR debounce state to current sensor
       int irNow = digitalRead(IR_SENSOR_PIN);
       irLastRead    = irNow;
       irStableState = irNow;
+      irLastChange  = millis();
+      dbgIrEpisode  = false;  // DEBUG: reset jitter tracker on state sync
+      dbgTimingBlocked = (irNow == LOW);  // DEBUG: sync timing tracker
       if(irNow == LOW){
-        pinEdgeArmed = false;   // beam currently blocked → don't arm yet
+        pinEdgeArmed = false;
+        queuedPinEvents++;      // pin already at sensor — count it
+        queuedPinDetectMs = millis();
+      } else {
+        pinEdgeArmed = false;   // let arm delay handle arming from clean baseline
       }
 
       suspendConveyorUntilHomeDone=false;
@@ -916,14 +1208,15 @@ void runHomingFSM(){
 void startTurretReleaseCycle(){ dropCycleJustFinished=false; turretReleaseRequested=true; }
 
 void updateConveyorOutput(){
-  if(postSetResumeDelayActive){
-    if(millis() - postSetResumeStart < RESUME_AFTER_DECKUP_MS){
-      ConveyorOff();
-      return;
-    }else{
-      postSetResumeDelayActive = false;
-    }
-  }
+  // DISABLED: postSetResumeDelay — was pausing conveyor 2s after deck-up
+  // if(postSetResumeDelayActive){
+  //   if(millis() - postSetResumeStart < RESUME_AFTER_DECKUP_MS){
+  //     ConveyorOff();
+  //     return;
+  //   }else{
+  //     postSetResumeDelayActive = false;
+  //   }
+  // }
 
   if(conveyorLockedByDwell){
     if(millis()-releaseDwellStart<RELEASE_FEED_ASSIST_MS) ConveyorOn();  else ConveyorOff();
@@ -932,6 +1225,11 @@ void updateConveyorOutput(){
   if(suspendConveyorUntilHomeDone){ ConveyorOff(); return; }
 
   if(conesFullHold){ ConveyorOff(); return; }
+
+  // 10th pin already detected but turret can't release yet (deck is down
+  // during throw sequence). Stop the conveyor immediately — no more pins
+  // are needed and continued feeding would double-load the turret slot.
+  if(tenthPinReady && !releaseDwellActive){ ConveyorOff(); return; }
 
   bool need=false;
 
@@ -1122,21 +1420,32 @@ void handleCommand(String cmd){
       Serial.println("ACK_NO_PINSETTER_COMMAND_GIVEN");
     }
     freeData(&strData);
+  } else if(cmd=="debug"){
+    dbgDump();
   } else {
-    Serial.println("ACK_UNKNOWN_COMMAND");Serial.print("DEBUG: unknow command:");Serial.println(cmd);
+    Serial.println("ACK_UNKNOWN_COMMAND");Serial.print("DEBUG: unknown command:");Serial.println(cmd);
   }
 }
 
 void checkInputChanges(){
   for(int i=0;i<inputCount;i++){
+    int scoreMorePin=getScoreMorePin(inputPins[i]);
     int currentState=digitalRead(inputPins[i]);
-    if(currentState!=pinStates[i]){
-      pinStates[i]=currentState;
-      int scoreMorePin=getScoreMorePin(inputPins[i]);
-      if(scoreMorePin!=-1){
-        Serial.print("INPUT_CHANGE:"); Serial.print(scoreMorePin); Serial.print(":"); Serial.println(currentState);
-      }   
+    if(scoreMorePin==SM_PINSETTER_RESET){
+      resetButtonHandler(currentState);  //need to handle the reset pin specially
+    } else {
+      if(currentState!=pinStates[i]){
+        pinStates[i]=currentState;
+        if(scoreMorePin!=-1){
+          Serial.print("INPUT_CHANGE:"); Serial.print(scoreMorePin); Serial.print(":"); Serial.println(currentState);
+        }
+      }
     }
+  }
+  // if scoremore isn't loaded, or if it's not setup to track the reset pin then
+  //   we will handle everything locally
+  if(!isTrackedInput(PINSETTER_RESET_PIN)){
+    resetButtonHandler(-1);  //will need to read in the state of the pin
   }
 }
 
@@ -1209,7 +1518,7 @@ void updateSweepTween(){
 void waitSweepDone(unsigned long timeoutMs){
   unsigned long start=millis();
   while(sweepAnimating && (millis()-start)<timeoutMs){
-    updateSweepTween(); delay(1);
+    updateSweepTween(); delayWithResetButtonCheck(1);
   }
   if(sweepAnimating){
     sweepCurL=sweepTargetL; sweepCurR=sweepTargetR;
@@ -1253,11 +1562,13 @@ void EmptyTurret() {
   stepper1.moveTo(farTarget);
   while (digitalRead(HALL_EFFECT_PIN) == HIGH && stepper1.distanceToGo() != 0) {
     stepper1.run();
+    resetButtonHandler(-1);
   }
 
   stepper1.stop();
   while (stepper1.isRunning()) {
     stepper1.run();
+    resetButtonHandler(-1);
   }
 
   stepper1.setCurrentPosition(TURRET_HOME_ADJUSTER);
@@ -1266,6 +1577,7 @@ void EmptyTurret() {
   goTo(PinPositions[9]);
   while (stepper1.distanceToGo() != 0) {
     stepper1.run();
+    resetButtonHandler(-1);
   }
 
   // 3) Slow spring-safe move to purge release
@@ -1276,6 +1588,7 @@ void EmptyTurret() {
   stepper1.moveTo(purgeReleasePos);
   while (stepper1.distanceToGo() != 0) {
     stepper1.run();
+    resetButtonHandler(-1);
   }
 
   // 4) Dwell at release
@@ -1510,4 +1823,111 @@ void exitPauseMode(){
   // Resume: sweep back up + white lights
   SweepUp();
   setAllLightsWhite();
+}
+
+void delayWithResetButtonCheck(unsigned long delayMs){
+  unsigned long startMs = millis();
+  unsigned long loopCount = 0;  //use to only check button periodically while loop is running
+  do{
+    if(loopCount % 15 == 0){  //check the button first time through and every 15 ms after that
+      resetButtonHandler(-1);
+    }
+    loopCount++;
+    delay(1);
+  }while(millis()-startMs<delayMs);
+}
+
+void resetButtonHandler(int btnState){
+  // ======================= RESET BUTTON LOGIC =======================
+  bool scoreMoreHandlesReset=true;
+  if(btnState == -1){
+    btnState = digitalRead(PINSETTER_RESET_PIN);
+    scoreMoreHandlesReset=false;
+  }
+  // Button just pressed
+  if (btnState == LOW && !resetBtnPressed) {
+    Serial.println("LOG: reset button just pressed");
+    resetBtnPressed = true;
+    resetBtnPressTime = millis();
+    resetBtnHandled = false;
+  }
+  // Button is being held down
+  else if (btnState == LOW && resetBtnPressed) {
+    if(!resetBtnHeld) {Serial.println("LOG: reset button being held");}
+    resetBtnHeld=true;
+    if (!resetBtnHandled && (millis() - resetBtnPressTime >= 1500)) {
+      Serial.print("LOG: reset button held for more than long press time, actual time=");Serial.println(millis() - resetBtnPressTime);
+      resetBtnHandled = true; // Long press triggered
+      if (!maintenanceMode) {
+        enterMaintenanceMode();
+      }
+    }
+  }
+  // Button released
+  else if (btnState == HIGH && resetBtnPressed) {
+    Serial.println("LOG: reset button released");
+    resetBtnPressed = false;
+    resetBtnHeld = false;
+    // Quick press (with a 50ms debounce buffer)
+    if (!resetBtnHandled && (millis() - resetBtnPressTime > 50)) {
+      Serial.println("LOG: reset button press time greater than debounce");
+      if (maintenanceMode) {
+        Serial.println("LOG: exiting maintenance mode");  //should never get here.
+      } else if (pauseMode) {
+        Serial.println("LOG: exiting pause mode");
+        exitPauseMode();
+      } else {
+        Serial.println("LOG: reset button pressed, calling triggerLaneReset");
+        triggerLaneReset(scoreMoreHandlesReset);
+      }
+    }
+  }
+}
+// ======================= MAINTENANCE & RESET PROFILES =======================
+void triggerLaneReset(bool scoreMoreHandlesReset) {
+  if(scoreMoreHandlesReset){
+    // 1. Let Scoremore know we're resetting the lane via the physical button
+    Serial.println("LOG: Sending ScoreMore reset pin INPUT_CHANGE messages");
+
+    Serial.print("INPUT_CHANGE:"); Serial.print(SM_PINSETTER_RESET); Serial.println(":1");
+    Serial.print("INPUT_CHANGE:"); Serial.print(SM_PINSETTER_RESET); Serial.println(":0");
+  } else {
+    Serial.println("LOG: Triggering Lane Reset directly");
+    pinsetterResetRequested=true;
+  }
+}
+
+void enterMaintenanceMode() {
+  if(maintenanceMode==true){return;}  //don't reenter!
+  maintenanceMode = true;
+  Serial.print("LOG: entering Maintenance Mode, stepIndex:");Serial.println(stepIndex);
+  stepIndex=0;  //discard any in progress sequences
+  ConveyorOff();
+  stepper1.stop(); // Instantly halt stepper calculations
+  moving = false;
+  // Kill signals to servos
+  ScissorsServo.detach();
+  SlideServo.detach(); 
+  LeftRaiseServo.detach();
+  RightRaiseServo.detach();
+  LeftSweepServo.detach();
+  RightSweepServo.detach();
+  BallReturnServo.detach();
+  stepper1.disableOutputs(); // Unlock Turret
+  //turn off LEDS in case there's an issue there:
+  deckAll(C_OFF(deckL));
+  laneAll(C_OFF(laneL));
+  ledsShowAll();
+  //turn off FRAME_LEDs
+  digitalWrite(FRAME_LED1_PIN, LOW);
+  digitalWrite(FRAME_LED2_PIN, LOW);
+  //infinte loop reset required to continue
+  while (true){
+    delay (250);
+    digitalWrite(FRAME_LED1_PIN, HIGH);
+    digitalWrite(FRAME_LED2_PIN, LOW);
+    delay (250);
+    digitalWrite(FRAME_LED1_PIN, LOW);
+    digitalWrite(FRAME_LED2_PIN, HIGH);
+  }
 }

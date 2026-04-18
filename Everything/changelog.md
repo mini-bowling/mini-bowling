@@ -1,9 +1,40 @@
 # Everything Script - Changelog
 
-## Version 1.2.4 - 2026-03-05
+## Version 1.3.0 - 2026-03-30
+
+### Added
+- **Debug ring buffer** (`debug` serial command): Stores last 100 turret/IR debug messages in a ring buffer (4800 bytes SRAM). Dumped on pinsetter reset or via `debug` command.
+- **IR jitter episode tracking**: Detects and logs IR sensor jitter episodes where raw transitions occur but debounce never confirms — helps diagnose missed pin detections (Case 1).
+- **IR timing diagnostics**: Logs raw IR blocked/cleared transitions with timestamps and gap durations, mirroring the Master_Test buffered log format.
+- **Deferred 10th pin release** (`tenthPinReady`): When the 10th pin is detected while the deck is down (e.g., during throw-1 grab/sweep/drop), the turret holds at slot 9 and waits for the deck to come back up before releasing. Prevents pins from falling while deck is occupied.
+- **Release head-start delay** (`RELEASE_HEAD_START_MS`): Delays conveyor resume after a deferred turret release starts, giving the turret time to reach slot 10 before the conveyor feeds the next pin.
+- **Conveyor timer freeze**: Catch delay and ninth settle timers are frozen while the conveyor is off, preventing premature expiration when a pin is still in transit on the belt.
+- **Stepper enable pin support**: Configures `STEPPER_ENABLE_PIN` at startup if defined in `pin_config.h`.
+- Config: `RELEASE_HEAD_START_MS`, `TLOAD_ARM_DELAY_MS` added to `general_config.h`
+- Config: Real-world pin timing documentation added to `DEBOUNCE_MS`, `CATCH_DELAY_MS`, and turret timing section comments
+- **Reset button short press / long press**: Short press triggers a lane reset (sends ScoreMore `INPUT_CHANGE` if ScoreMore tracks the pin, otherwise triggers reset locally). Long press (1.5 seconds) enters maintenance mode.
+- **Maintenance mode**: Long-pressing the reset button detaches all servos, stops the stepper and conveyor, turns off all LEDs, and enters an infinite loop with alternating frame LED blink. Requires Arduino power cycle to exit.
+- **`delayWithResetButtonCheck()`**: Replaces bare `delay()` calls during startup and blocking waits so the reset button remains responsive during initialization and sweep waits.
+- **`general_config.user.h.example`**: Example file showing commonly overridden config values (LED strip lengths, servo angles, timing, brightness) as a starting point for per-machine customization.
 
 ### Changed
-- No changes to the Everything script in this version (Test and Config Tool only)
+- **Strike sweep is now non-blocking**: Replaced blocking `StrikeSweepClearLane()` (which used `pumpAll()` waits) with FSM steps 11-14 in `runSequence()`. Strike detection at step 1 now transitions to a sweep-back/guard/wipe sequence without blocking the main loop.
+- **IR re-arm uses arm delay instead of catch-delay suppression**: Removed the third re-arm suppression layer that prevented re-arming during the entire `CATCH_DELAY` phase. This caused missed pin detections when pins arrived during the 800ms window. Now uses only debounce (50ms) + arm delay (200ms), which safely re-arms ~170ms before the next pin arrives.
+- **Catch delay starts from pin detection time**, not queue consumption time. Prevents cumulative timing drift when pins arrive during a previous catch delay.
+- **Catch delay waits for pin to clear sensor** (`irStableState == HIGH` gate). Prevents advancing while a pin is still blocking the beam.
+- **Ninth settle waits for pin to clear**: Requires `irStableState == HIGH` before transitioning to 10th pin wait. Eliminates phantom 10th pin detections from slow-clearing 9th pins or post-clear IR echoes.
+- **Ninth settle resets debounce state**: Full IR state resync after ninth settle, starting the arm-delay countdown from a clean baseline.
+- **Homing clears stale pin events**: `queuedPinEvents` reset to 0 on homing completion, preventing phantom detections from pre-homing IR activity.
+- **Homing counts pre-blocked sensor**: If a pin is already at the IR sensor when homing completes, it's immediately queued rather than waiting for re-arm.
+- **Step 7 gates on turret release completion**: Deck won't lower for pin drop while the turret is still releasing pins onto the sliding deck. Prevents collision when 10th pin release fires during throw-1 steps.
+- **Scissors stay open during turret release**: Removed `ScissorsServo.write(SCISSOR_GRAB_ANGLE)` from 10th pin handling. Scissors only close during pin pickup.
+- **Disabled postSetResumeDelay**: Removed the 2-second conveyor pause after deck-up during pin set. This could strand a pin mid-transit on the conveyor belt, causing catch delay expiration before pin arrival.
+- **Conveyor stops when 10th pin is deferred** (`tenthPinReady`): No more pins are needed, so the conveyor shuts off immediately to prevent double-loading.
+- **IR re-arm suppressed when `tenthPinReady`**: Prevents phantom 11th pin events from conveyor inertia or pin wobble after the 10th pin is detected.
+
+### Fixed
+- Removed blocking `StrikeSweepClearLane()` that could stall the main loop during strikes
+- Fixed race condition where background refill at step 2 could trigger turret release while deck was not ready
 
 ## Version 1.2.3 - 2026-02-23
 

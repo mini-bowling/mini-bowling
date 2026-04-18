@@ -148,6 +148,12 @@
 #define TURRET_PIN10_RELEASE_OFFSET -30
 #endif
 
+// Max drift (steps) before re-homing is triggered after release.
+// Hall sensor position is checked on the return move to slot 1.
+#ifndef TURRET_VERIFY_TOLERANCE
+#define TURRET_VERIFY_TOLERANCE  20      // DEFAULT: 20
+#endif
+
 // Extra offset for empty-turret purge at boot
 #ifndef TURRET_EMPTY_EXTRA_OFFSET
 #define TURRET_EMPTY_EXTRA_OFFSET   -60 // DEFAULT: -60
@@ -194,6 +200,9 @@
 
 // =====================================================
 // INPUT DEBOUNCE TIME (milliseconds)
+// Filters all observed IR jitter: leading-edge bounce (0-1ms),
+// trailing-edge bounce (0-1ms), post-clear echo (27-43ms).
+// All jitter events are well under 50ms.
 // =====================================================
 #ifndef DEBOUNCE_MS
 #define DEBOUNCE_MS     50
@@ -201,9 +210,19 @@
 
 // =====================================================
 // TURRET TIMING (milliseconds)
+//
+// Real-world pin timing (from Conveyor_Timing sketch, raw unfiltered transitions):
+//   "Blocked" = time from raw LOW (pin arrives) to raw HIGH (pin clears)
+//   "Gap"     = edge-to-edge clear time: raw HIGH (pin clears) to raw LOW (next pin arrives)
+//   Blocked duration: 203-331ms (typical ~275-310ms)
+//   Gap between consecutive pins: 584-1005ms (typical ~730ms)
 // =====================================================
 #ifndef CATCH_DELAY_MS
 #define CATCH_DELAY_MS          800   // Pause after catching pin at slots 1-8. DEFAULT: 800
+                                      // Gives the pin time to settle in the turret slot before
+                                      // advancing. IR re-arm happens during this window
+                                      // (~525-560ms after catch) so the next pin is detected
+                                      // even if it arrives before the delay expires.
 #endif
 #ifndef RELEASE_DWELL_MS
 #define RELEASE_DWELL_MS        1000  // Dwell at release position for pins to fall. DEFAULT: 1000
@@ -211,11 +230,22 @@
 #ifndef RELEASE_FEED_ASSIST_MS
 #define RELEASE_FEED_ASSIST_MS  250   // Conveyor assist during release dwell. DEFAULT: 250
 #endif
+#ifndef RELEASE_HEAD_START_MS
+#define RELEASE_HEAD_START_MS   150   // When the 10th pin is deferred (tenthPinReady) and the turret
+                                      // starts its release move, delay conveyor resume by this amount
+                                      // so the turret reaches slot 10 before the conveyor feeds the
+                                      // next pin. Without this, the conveyor and turret start at the
+                                      // same time and the pin can arrive before the turret is in
+                                      // position. DEFAULT: 150
+#endif
 #ifndef NINTH_SETTLE_MS
 #define NINTH_SETTLE_MS         300   // Settle time after 9th pin caught. DEFAULT: 300
 #endif
 #ifndef TLOAD_ARM_DELAY_MS
 #define TLOAD_ARM_DELAY_MS      200   // Min beam-clear time before re-arming IR for next pin. DEFAULT: 200
+                                      // Must be > post-clear echo window (~143ms from pin clear)
+                                      // to prevent jitter-based false detections. 200ms provides
+                                      // ~57ms margin over worst-case echo timing.
 #endif
 
 // =====================================================

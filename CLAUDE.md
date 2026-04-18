@@ -81,7 +81,7 @@ These rules MUST be followed in any automated sequence to avoid mechanical damag
 
 17. **Scissor should be in drop position before sliding deck releases pins.** This keeps the scissors open so the pins can slide through the opening before the sliding deck moves to the release position.
 
-18. **Deck must be prepared before any sequence moves turret to release position (slot 10).** In automated sequence code, always ensure: raise servos at `RAISE_UP_ANGLE` (with settle wait), sliding deck at `SLIDER_HOME_ANGLE`, and scissor at `SCISSOR_GRAB_ANGLE` before the turret begins moving to the release position. This does not apply to manual test menu commands, only to automated sequences.
+18. **Deck must be prepared before any sequence moves turret to release position (slot 10).** In automated sequence code, always ensure: raise servos at `RAISE_UP_ANGLE` (with settle wait) and sliding deck at `SLIDER_HOME_ANGLE` before the turret begins moving to the release position. Scissors should remain open (drop position) — they do not need to close for turret release. This does not apply to manual test menu commands, only to automated sequences.
 
 ## Test Script: Pin Drop Sequence (Automated)
 
@@ -166,7 +166,7 @@ When starting a turret load:
 - **Turret must be empty before loading.** Loading into an already-loaded turret will jam pins.
 - **Hall sensor must be enabled.** Homing requires the hall effect sensor to be active.
 - **Sliding deck must be at home/catch position before turret release.** The sliding deck catches pins falling from the turret. If it is extended, pins won't seat properly.
-- **Scissor should be in grab position before turret release.** The scissor grips the pin plate on the deck to hold pins in place as they fall from the turret.
+- **Scissors stay open (drop position) during turret release.** The scissors only need to close when picking up pins from the lane (pin pickup sequence). They remain open for all other operations including turret release.
 - **Spring-safe speed for release.** Moving to the release position (slot 10) uses slower speed (`TURRET_SPRING_MAXSPEED` / `TURRET_SPRING_ACCEL`) because the spring mechanism that holds pins can eject them violently at high speed.
 - **Pin queue.** If pins arrive from the conveyor faster than the catch delay, they are queued and processed one at a time to avoid missed detections.
 - **IR debounce.** The turret load FSM uses its own independent IR debounce (separate from `monitorInputs()`) using `DEBOUNCE_MS` (50ms) to reliably detect pin arrivals.
@@ -241,6 +241,16 @@ Long-running operations (homing, sweep clear, pin drop, turret load) use non-blo
 - `pin_config.h` - Hardware pin assignments (rarely changed)
 - `general_config.h` - Calibration values, servo angles, timing constants (frequently adjusted per machine)
 - `general_config.user.h` - Optional per-machine override (copy of general_config.h, git-ignored)
+
+## Version Number Locations
+
+When changing versions, update all of the following:
+- `Master_Test/Master_Test.ino` — file header comment and startup banner `Serial.println`
+- `Master_Test/changelog.md` — add new version entry
+- `Everything/Everything.ino` — `#define VERSION`
+- `Everything/changelog.md` — version heading
+- `config-tool/index.html` — `<title>`, header subtitle, and footer (3 occurrences)
+- `config-tool/changelog.md` — version heading
 
 ## Test Script: Coding Conventions
 - Use `F()` macro for all `Serial.println` string literals (stores in flash, saves RAM)

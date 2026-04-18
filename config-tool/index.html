@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mini Bowling – Config Tool v1.0.0</title>
+  <title>Mini Bowling – Config Tool v1.3.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap">
@@ -964,7 +964,7 @@
     <div class="header-logo">🎳</div>
     <div class="header-title">
       <h1>Mini Bowling Pinsetter Arduino Config Tool</h1>
-      <div class="subtitle">Mini Bowling Pinsetter &mdash; Arduino Mega 2560 &nbsp;&middot;&nbsp; v1.0.0</div>
+      <div class="subtitle">Mini Bowling Pinsetter &mdash; Arduino Mega 2560 &nbsp;&middot;&nbsp; v1.3.0</div>
     </div>
   </div>
   <button class="btn btn-ghost tour-help-btn" onclick="openTour()" title="Show guide">
@@ -1243,7 +1243,7 @@
 </main>
 
 <div class="footer">
-  Configuration Tool v1.0.0
+  Configuration Tool v1.3.0
   &nbsp;·&nbsp;
   All processing happens in your browser — no data is sent anywhere.
   &nbsp;·&nbsp;
@@ -1369,6 +1369,7 @@ const GENERAL_GROUPS = [
       { name: 'TURRET_HOME_ADJUSTER',        def: '-63',    type: 'int',    desc: 'Fine-tune home position after homing (steps; less negative = CCW)' },
       { name: 'TURRET_PIN10_RELEASE_OFFSET', def: '-30',    type: 'int',    desc: 'Extra offset applied to the release position (slot 10)', expert: true },
       { name: 'TURRET_EMPTY_EXTRA_OFFSET',   def: '-60',    type: 'int',    desc: 'Extra offset for empty-turret purge at boot', expert: true },
+      { name: 'TURRET_VERIFY_TOLERANCE',    def: '20',     type: 'uint',   desc: 'Max hall sensor drift (steps) before re-homing after release', expert: true },
     ],
   },
   {
@@ -1412,7 +1413,9 @@ const GENERAL_GROUPS = [
       { name: 'CATCH_DELAY_MS',         def: '800',  type: 'uint', desc: 'Settle pause after catching a pin at slots 1–8 (ms)' },
       { name: 'RELEASE_DWELL_MS',       def: '1000', type: 'uint', desc: 'Dwell at release position while all pins fall onto deck (ms)' },
       { name: 'RELEASE_FEED_ASSIST_MS', def: '250',  type: 'uint', desc: 'Conveyor assist run duration during release dwell (ms)' },
+      { name: 'RELEASE_HEAD_START_MS', def: '150',  type: 'uint', desc: 'Delay conveyor resume after turret starts deferred release move, so turret reaches slot 10 first (ms)' },
       { name: 'NINTH_SETTLE_MS',        def: '300',  type: 'uint', desc: 'Settle pause after 9th pin caught before waiting for 10th (ms)' },
+      { name: 'TLOAD_ARM_DELAY_MS',     def: '200',  type: 'uint', desc: 'Min beam-clear time before re-arming IR for next pin (ms)' },
     ],
   },
   {
