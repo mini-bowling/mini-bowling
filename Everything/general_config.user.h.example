@@ -1,0 +1,72 @@
+// =====================================================
+// USER CONFIGURATION - OVERRIDE VALUES
+//  Customize for your machine, some of the most used
+//  Values are here, copy any additional defines that
+//  you want to override from the general_config.h file
+// =====================================================
+
+// =====================================================
+// SCOREMORE SERIAL BAUD RATE & CONFIG
+// =====================================================
+#define SCOREMORE_USER      0     // DEFAULT: 0, do not wait for Scoremore connect. Set to 1 to wait for Scoremore before intialization.
+
+// =====================================================
+// LED STRIP LENGTHS
+// Left and right can be set independently if needed
+// =====================================================
+#define DECK_LED_LENGTH_L   11    // Left deck strip.  DEFAULT: 11
+#define DECK_LED_LENGTH_R   11    // Right deck strip. DEFAULT: 11
+#define LANE_LED_LENGTH_L   41    // Left lane strip.  DEFAULT: 41
+#define LANE_LED_LENGTH_R   41    // Right lane strip. DEFAULT: 41
+
+// =====================================================
+// CONVEYOR SETTINGS
+// =====================================================
+// Set to 1 if relay is active HIGH, 0 if active LOW.
+#define CONVEYOR_ACTIVE_HIGH 1    // DEFAULT: 1
+
+// =====================================================
+// LED BRIGHTNESS (0-255)
+// =====================================================
+#define LED_BRIGHTNESS_NORMAL  80 // Lane LED brightness (0-255). DEFAULT: 80
+#define DECK_LED_BRIGHTNESS    80 // Deck LED brightness (0-255). DEFAULT: 80
+#define LED_BRIGHTNESS_STRIKE  40 // Reduced brightness during strike animation (0-255). DEFAULT: 40
+
+// =====================================================
+// SWEEP SERVO ANGLES
+// Left and Right servos are mirrored (R = 180 - L)
+// =====================================================
+#define SWEEP_GUARD_ANGLE   50    // Guard position.  DEFAULT: 50
+#define SWEEP_UP_ANGLE      85    // Up position.     DEFAULT: 85
+
+
+// =====================================================
+// SCISSOR SERVO ANGLES
+// =====================================================
+#define SCISSOR_GRAB_ANGLE  140   // DEFAULT: 140
+
+// =====================================================
+// SLIDING DECK SERVO ANGLES
+// =====================================================
+#define SLIDER_RELEASE_ANGLE    100  // Release position. DEFAULT: 100
+
+// =====================================================
+// RAISE SERVO ANGLES
+// Left and Right servos are mirrored (R = 180 - L)
+// =====================================================
+#define RAISE_DOWN_ANGLE        20   // Down/Set position. DEFAULT: 20
+#define RAISE_GRAB_ANGLE        60   // Grab position.     DEFAULT: 60
+#define RAISE_DROP_ANGLE        80   // Drop position.     DEFAULT: 80
+
+
+// Home position adjuster (fine-tune after homing).
+// Less negative means CCW
+#define TURRET_HOME_ADJUSTER    -63     // DEFAULT: -63
+
+// =====================================================
+// EVERYTHING-SPECIFIC TIMING (milliseconds)
+// Used only by Everything.ino
+// =====================================================
+
+// Pause mode idle timeout
+#define PAUSE_IDLE_MS           300000 // 5 minutes. DEFAULT: 300000

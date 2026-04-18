@@ -148,6 +148,17 @@ bool strikeLightOn=false, strikeEdgeLatched=false, strikeDetected=false;
 
 // Reset button
 bool pinsetterResetRequested=false;
+unsigned long resetBtnPressTime = 0;
+bool resetBtnPressed = false;
+bool resetBtnHeld    = false;
+bool resetBtnHandled = false;
+bool maintenanceMode = false;
+
+// Pre-declare lane reset button functions
+void delayWithResetButtonCheck(unsigned long delayMs);
+void resetButtonHandler(int btnState);
+void triggerLaneReset(bool scoreMoreHandlesReset);
+void enterMaintenanceMode();
 
 // ===== Fill-ball (ScoreMore logical pin 7) =====
 bool autoResetFillBall = false;
@@ -361,20 +372,26 @@ void setup(){
 
   stepper1.setMaxSpeed(TURRET_NORMAL_MAXSPEED);
   stepper1.setAcceleration(TURRET_NORMAL_ACCEL);
+  #ifdef STEPPER_ENABLE_PIN
+  stepper1.setEnablePin(STEPPER_ENABLE_PIN);
+  #endif
+  // true = invert the enable pin (standard for stepsticks where LOW = on, HIGH = off)
+  stepper1.setPinsInverted(false, false, true);
+  stepper1.enableOutputs();
 
   LeftRaiseServo.attach(RAISE_LEFT_PIN);
   RightRaiseServo.attach(RAISE_RIGHT_PIN);
   ScissorsServo.attach(SCISSOR_PIN);
   
-  DeckPinDrop(); delay(1000);
-  ScissorsGrab(); delay(1000);
-  ScissorsDrop(); delay(1000);
+  DeckPinDrop(); delayWithResetButtonCheck(1000);
+  ScissorsGrab(); delayWithResetButtonCheck(1000);
+  ScissorsDrop(); delayWithResetButtonCheck(1000);
 
   BallReturnServo.attach(BALL_RETURN_PIN);
-  DeckUp(); delay(1000);
+  DeckUp(); delayWithResetButtonCheck(1000);
   
   BallReturnClosed(); brState=BR_IDLE_CLOSED; brStateStart=millis();
-  delay(1000);
+  delayWithResetButtonCheck(1000);
 
   LeftSweepServo.attach(LEFT_SWEEP_PIN);
   RightSweepServo.attach(RIGHT_SWEEP_PIN);
@@ -410,8 +427,9 @@ void setup(){
   // Initial home (blocking only here)
   lastRunTurretMs = millis();
   startHomeTurret();
+  Serial.println("LOG: starting Turret Homing");
   while(homingActive){
-    runTurret(); updateConveyorOutput(); updateBallReturnDoor(); updateSweepTween(); laneUpdate(); delay(1);
+    runTurret(); updateConveyorOutput(); updateBallReturnDoor(); updateSweepTween(); laneUpdate(); delayWithResetButtonCheck(1);
   }
 
   NowCatching=1; goTo(PinPositions[1]); loadedCount=0;
@@ -430,11 +448,23 @@ void setup(){
   lastBallActivityMs = millis();
 
   updateFrameLEDs();
+  pinsetterResetRequested=false;  // ignore any reset requests that might come in during startup
 }
 
 // ======================= LOOP =======================
 void loop(){
   unsigned long now=millis();
+  // if in maintenance mode don't do anything in the loop, just check for reset button activity
+  if(maintenanceMode){
+    static bool mainLoopWarned = false;
+    if(!mainLoopWarned){
+      Serial.println(F("WARNING: loop() reached while in maintenance mode"));
+      mainLoopWarned = true;
+    }
+    delay(10);
+    resetButtonHandler(-1);
+    return;
+  }
 
   updateSweepTween();
   runTurret();
@@ -700,7 +730,6 @@ void PowerOnSequence(){
 
   SweepBack(); waitSweepDone(); pumpAll(400);
   SweepGuard(); waitSweepDone(); pumpAll(400);
-
   EmptyTurret(); pumpAll(600);
 
   DeckPinSet();          pumpAll(800);
@@ -1394,20 +1423,29 @@ void handleCommand(String cmd){
   } else if(cmd=="debug"){
     dbgDump();
   } else {
-    Serial.println("ACK_UNKNOWN_COMMAND");Serial.print("DEBUG: unknow command:");Serial.println(cmd);
+    Serial.println("ACK_UNKNOWN_COMMAND");Serial.print("DEBUG: unknown command:");Serial.println(cmd);
   }
 }
 
 void checkInputChanges(){
   for(int i=0;i<inputCount;i++){
+    int scoreMorePin=getScoreMorePin(inputPins[i]);
     int currentState=digitalRead(inputPins[i]);
-    if(currentState!=pinStates[i]){
-      pinStates[i]=currentState;
-      int scoreMorePin=getScoreMorePin(inputPins[i]);
-      if(scoreMorePin!=-1){
-        Serial.print("INPUT_CHANGE:"); Serial.print(scoreMorePin); Serial.print(":"); Serial.println(currentState);
-      }   
+    if(scoreMorePin==SM_PINSETTER_RESET){
+      resetButtonHandler(currentState);  //need to handle the reset pin specially
+    } else {
+      if(currentState!=pinStates[i]){
+        pinStates[i]=currentState;
+        if(scoreMorePin!=-1){
+          Serial.print("INPUT_CHANGE:"); Serial.print(scoreMorePin); Serial.print(":"); Serial.println(currentState);
+        }
+      }
     }
+  }
+  // if scoremore isn't loaded, or if it's not setup to track the reset pin then
+  //   we will handle everything locally
+  if(!isTrackedInput(PINSETTER_RESET_PIN)){
+    resetButtonHandler(-1);  //will need to read in the state of the pin
   }
 }
 
@@ -1480,7 +1518,7 @@ void updateSweepTween(){
 void waitSweepDone(unsigned long timeoutMs){
   unsigned long start=millis();
   while(sweepAnimating && (millis()-start)<timeoutMs){
-    updateSweepTween(); delay(1);
+    updateSweepTween(); delayWithResetButtonCheck(1);
   }
   if(sweepAnimating){
     sweepCurL=sweepTargetL; sweepCurR=sweepTargetR;
@@ -1524,11 +1562,13 @@ void EmptyTurret() {
   stepper1.moveTo(farTarget);
   while (digitalRead(HALL_EFFECT_PIN) == HIGH && stepper1.distanceToGo() != 0) {
     stepper1.run();
+    resetButtonHandler(-1);
   }
 
   stepper1.stop();
   while (stepper1.isRunning()) {
     stepper1.run();
+    resetButtonHandler(-1);
   }
 
   stepper1.setCurrentPosition(TURRET_HOME_ADJUSTER);
@@ -1537,6 +1577,7 @@ void EmptyTurret() {
   goTo(PinPositions[9]);
   while (stepper1.distanceToGo() != 0) {
     stepper1.run();
+    resetButtonHandler(-1);
   }
 
   // 3) Slow spring-safe move to purge release
@@ -1547,6 +1588,7 @@ void EmptyTurret() {
   stepper1.moveTo(purgeReleasePos);
   while (stepper1.distanceToGo() != 0) {
     stepper1.run();
+    resetButtonHandler(-1);
   }
 
   // 4) Dwell at release
@@ -1781,4 +1823,111 @@ void exitPauseMode(){
   // Resume: sweep back up + white lights
   SweepUp();
   setAllLightsWhite();
+}
+
+void delayWithResetButtonCheck(unsigned long delayMs){
+  unsigned long startMs = millis();
+  unsigned long loopCount = 0;  //use to only check button periodically while loop is running
+  do{
+    if(loopCount % 15 == 0){  //check the button first time through and every 15 ms after that
+      resetButtonHandler(-1);
+    }
+    loopCount++;
+    delay(1);
+  }while(millis()-startMs<delayMs);
+}
+
+void resetButtonHandler(int btnState){
+  // ======================= RESET BUTTON LOGIC =======================
+  bool scoreMoreHandlesReset=true;
+  if(btnState == -1){
+    btnState = digitalRead(PINSETTER_RESET_PIN);
+    scoreMoreHandlesReset=false;
+  }
+  // Button just pressed
+  if (btnState == LOW && !resetBtnPressed) {
+    Serial.println("LOG: reset button just pressed");
+    resetBtnPressed = true;
+    resetBtnPressTime = millis();
+    resetBtnHandled = false;
+  }
+  // Button is being held down
+  else if (btnState == LOW && resetBtnPressed) {
+    if(!resetBtnHeld) {Serial.println("LOG: reset button being held");}
+    resetBtnHeld=true;
+    if (!resetBtnHandled && (millis() - resetBtnPressTime >= 1500)) {
+      Serial.print("LOG: reset button held for more than long press time, actual time=");Serial.println(millis() - resetBtnPressTime);
+      resetBtnHandled = true; // Long press triggered
+      if (!maintenanceMode) {
+        enterMaintenanceMode();
+      }
+    }
+  }
+  // Button released
+  else if (btnState == HIGH && resetBtnPressed) {
+    Serial.println("LOG: reset button released");
+    resetBtnPressed = false;
+    resetBtnHeld = false;
+    // Quick press (with a 50ms debounce buffer)
+    if (!resetBtnHandled && (millis() - resetBtnPressTime > 50)) {
+      Serial.println("LOG: reset button press time greater than debounce");
+      if (maintenanceMode) {
+        Serial.println("LOG: exiting maintenance mode");  //should never get here.
+      } else if (pauseMode) {
+        Serial.println("LOG: exiting pause mode");
+        exitPauseMode();
+      } else {
+        Serial.println("LOG: reset button pressed, calling triggerLaneReset");
+        triggerLaneReset(scoreMoreHandlesReset);
+      }
+    }
+  }
+}
+// ======================= MAINTENANCE & RESET PROFILES =======================
+void triggerLaneReset(bool scoreMoreHandlesReset) {
+  if(scoreMoreHandlesReset){
+    // 1. Let Scoremore know we're resetting the lane via the physical button
+    Serial.println("LOG: Sending ScoreMore reset pin INPUT_CHANGE messages");
+
+    Serial.print("INPUT_CHANGE:"); Serial.print(SM_PINSETTER_RESET); Serial.println(":1");
+    Serial.print("INPUT_CHANGE:"); Serial.print(SM_PINSETTER_RESET); Serial.println(":0");
+  } else {
+    Serial.println("LOG: Triggering Lane Reset directly");
+    pinsetterResetRequested=true;
+  }
+}
+
+void enterMaintenanceMode() {
+  if(maintenanceMode==true){return;}  //don't reenter!
+  maintenanceMode = true;
+  Serial.print("LOG: entering Maintenance Mode, stepIndex:");Serial.println(stepIndex);
+  stepIndex=0;  //discard any in progress sequences
+  ConveyorOff();
+  stepper1.stop(); // Instantly halt stepper calculations
+  moving = false;
+  // Kill signals to servos
+  ScissorsServo.detach();
+  SlideServo.detach(); 
+  LeftRaiseServo.detach();
+  RightRaiseServo.detach();
+  LeftSweepServo.detach();
+  RightSweepServo.detach();
+  BallReturnServo.detach();
+  stepper1.disableOutputs(); // Unlock Turret
+  //turn off LEDS in case there's an issue there:
+  deckAll(C_OFF(deckL));
+  laneAll(C_OFF(laneL));
+  ledsShowAll();
+  //turn off FRAME_LEDs
+  digitalWrite(FRAME_LED1_PIN, LOW);
+  digitalWrite(FRAME_LED2_PIN, LOW);
+  //infinte loop reset required to continue
+  while (true){
+    delay (250);
+    digitalWrite(FRAME_LED1_PIN, HIGH);
+    digitalWrite(FRAME_LED2_PIN, LOW);
+    delay (250);
+    digitalWrite(FRAME_LED1_PIN, LOW);
+    digitalWrite(FRAME_LED2_PIN, HIGH);
+  }
 }

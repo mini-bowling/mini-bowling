@@ -12,6 +12,10 @@
 - **Stepper enable pin support**: Configures `STEPPER_ENABLE_PIN` at startup if defined in `pin_config.h`.
 - Config: `RELEASE_HEAD_START_MS`, `TLOAD_ARM_DELAY_MS` added to `general_config.h`
 - Config: Real-world pin timing documentation added to `DEBOUNCE_MS`, `CATCH_DELAY_MS`, and turret timing section comments
+- **Reset button short press / long press**: Short press triggers a lane reset (sends ScoreMore `INPUT_CHANGE` if ScoreMore tracks the pin, otherwise triggers reset locally). Long press (1.5 seconds) enters maintenance mode.
+- **Maintenance mode**: Long-pressing the reset button detaches all servos, stops the stepper and conveyor, turns off all LEDs, and enters an infinite loop with alternating frame LED blink. Requires Arduino power cycle to exit.
+- **`delayWithResetButtonCheck()`**: Replaces bare `delay()` calls during startup and blocking waits so the reset button remains responsive during initialization and sweep waits.
+- **`general_config.user.h.example`**: Example file showing commonly overridden config values (LED strip lengths, servo angles, timing, brightness) as a starting point for per-machine customization.
 
 ### Changed
 - **Strike sweep is now non-blocking**: Replaced blocking `StrikeSweepClearLane()` (which used `pumpAll()` waits) with FSM steps 11-14 in `runSequence()`. Strike detection at step 1 now transitions to a sweep-back/guard/wipe sequence without blocking the main loop.
