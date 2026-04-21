@@ -140,8 +140,16 @@ void scoremoreBallPulse_update(){
 
 // Ball trigger
 int  ballPrev=HIGH; bool ballPending=false, ballRearmed=true, waitingForBall=true;
+// True after ball detected (when ScoreMore connected); blocks sequence at step 1/22 until CAMERA:SNAPSHOT_TAKEN is received
 bool waitingForSnapshot=false;
+// True after SweepGuard fires on a throw; triggers startBallCometImmediate() once the sweep animation completes in loop()
 bool pendingComet=false;
+// True once the first ScoreMore serial command is received; gates snapshot and outcome waiting logic
+bool scoremoreConnected=false;
+// True after CAMERA:SNAPSHOT_TAKEN; blocks sequence at step 1/22 until ScoreMore sends a scoring outcome (spare, strike, or ball indicator)
+bool waitingForScoreMoreOutcome=false;
+// True once SweepGuard has been fired for the current throw; prevents re-firing while blocking for the ScoreMore outcome
+bool sweepFiredForThrow=false;
 unsigned long ballLowStartUs=0, lastBallHighMs=0;
 int  throwCount=1;
 
@@ -515,15 +523,14 @@ void loop(){
         scoreWindowActive=true;
 
         scoremoreBallPulse_begin();
-        #if SCOREMORE_USER == 1
-        waitingForSnapshot = true;
-        #endif
+        if(scoremoreConnected) waitingForSnapshot = true;
 
-        //startBallCometImmediate();
         onBallThrownDoorClose();
 
         lastPinCatchMs = millis();
 
+        sweepFiredForThrow = false;
+        waitingForScoreMoreOutcome = false;
         if (inFillBall) {
           stepIndex = 22;
           fillBallShotInProgress = true;
@@ -544,6 +551,10 @@ void loop(){
   } else {
     if(pinsetterResetRequested) {  //if the reset button has been pressed and no other sequences are queued
       dbgDump();
+      waitingForSnapshot=false;
+      waitingForScoreMoreOutcome=false;
+      sweepFiredForThrow=false;
+      pendingComet=false;
       stepIndex=22;       //trigger reset of the lane
       pinsetterResetRequested=false;
     }
@@ -565,16 +576,21 @@ void runSequence(){
 
   // ---------- Throw #1 ----------
   if(stepIndex==1){
-    #if SCOREMORE_USER == 1
+    // No timeout on either wait — if ScoreMore disconnects mid-throw or the camera
+    // never responds, the sequence will hang here until the reset button is pressed.
     if(waitingForSnapshot){ prevStepMillis=millis(); return; }
-    #endif
+    if(!sweepFiredForThrow){
+      SweepGuard(200); pendingComet=true;
+      sweepFiredForThrow=true;
+      if(scoremoreConnected){ waitingForScoreMoreOutcome=true; prevStepMillis=millis(); return; }
+    }
+    if(waitingForScoreMoreOutcome){ prevStepMillis=millis(); return; }
     if(strikeDetected){
       scoreWindowActive=false;
       Serial.println(F("STRIKE@STEP1"));
-      ScissorsDrop(); SweepGuard(200); pendingComet=true;
+      ScissorsDrop();
       stepIndex=11; prevStepMillis=millis(); return;
     }
-    SweepGuard(200); pendingComet=true;
   }
 
   // ---------- Strike sweep (non-blocking) ----------
@@ -615,10 +631,15 @@ void runSequence(){
 
   // ---------- Throw #2 ----------
   else if(stepIndex==22){
-    #if SCOREMORE_USER == 1
+    // No timeout on either wait — if ScoreMore disconnects mid-throw or the camera
+    // never responds, the sequence will hang here until the reset button is pressed.
     if(waitingForSnapshot){ prevStepMillis=millis(); return; }
-    #endif
-    SweepGuard(200); pendingComet=true;
+    if(!sweepFiredForThrow){
+      SweepGuard(200); pendingComet=true;
+      sweepFiredForThrow=true;
+      if(scoremoreConnected){ waitingForScoreMoreOutcome=true; prevStepMillis=millis(); return; }
+    }
+    if(waitingForScoreMoreOutcome){ prevStepMillis=millis(); return; }
   }
   else if(stepIndex==23){ SweepBack(); onSweepBackDoorHoldStart(); }
   else if(stepIndex==24){
@@ -672,6 +693,10 @@ void runSequence(){
     }
 
     throwCount=1; waitingForBall=true;
+    waitingForSnapshot=false;
+    waitingForScoreMoreOutcome=false;
+    sweepFiredForThrow=false;
+    pendingComet=false;
     updateFrameLEDs();
     stepIndex=0; prevStepMillis=millis(); return;
   }
@@ -1348,6 +1373,7 @@ int separate (String &str, char **p, int size, char** pdata, char separator){
 void handleCommand(String cmd){
   cmd.trim();
   if(cmd.startsWith("SET_INPUT:")){
+    scoremoreConnected = true;
     int scoreMorePin=cmd.substring(10).toInt();
     int pin=resolveArduinoPin(scoreMorePin);
     if(pin!=-1) {
@@ -1362,6 +1388,7 @@ void handleCommand(String cmd){
         Serial.print("ACK_SET_INPUT_INVALID_PIN:"); Serial.println(scoreMorePin);
     }
   } else if(cmd.startsWith("SET_OUTPUT:")){
+    scoremoreConnected = true;
     int scoreMorePin=cmd.substring(11).toInt();
     int pin=resolveArduinoPin(scoreMorePin);
     if(pin!=-1){
@@ -1371,6 +1398,7 @@ void handleCommand(String cmd){
       Serial.print("ACK_SET_OUTPUT_INVALID_PIN:"); Serial.println(scoreMorePin);
     }
   } else if(cmd.startsWith("WRITE:")){
+    scoremoreConnected = true;
     int firstColon=cmd.indexOf(':'), secondColon=cmd.indexOf(':', firstColon+1);
     if(firstColon>0 && secondColon>firstColon){
       int scoreMorePin=cmd.substring(firstColon+1, secondColon).toInt();
@@ -1404,21 +1432,28 @@ void handleCommand(String cmd){
             autoResetEdgeLatched = false;
           }
         }
+        if(scoreMorePin==SM_SPARE_LIGHT || scoreMorePin==SM_STRIKE_LIGHT || scoreMorePin==SM_SECOND_BALL){
+          waitingForScoreMoreOutcome=false;
+        }
         Serial.print("ACK_WRITE:"); Serial.print(scoreMorePin); Serial.print(":"); Serial.println(value);
       } else {
         Serial.print("ACK_WRITE_INVALID_PIN:");Serial.println(scoreMorePin);
-      } 
+      }
     }
   } else if(cmd=="RESET"){
+    scoremoreConnected = true;
     int strikePin=resolveArduinoPin(10);
     if(strikePin!=-1) digitalWrite(strikePin, LOW);
     strikeLightOn=false; strikeEdgeLatched=false; strikeDetected=false; strikePending=false;
     Serial.println("ACK_RESET");
   } else if(cmd=="CHECK_READY"){
+    scoremoreConnected = true;
     Serial.println("READY");
   } else if(cmd=="VERSION"){
+    scoremoreConnected = true;
     Serial.println(VERSION);
   } else if(cmd.startsWith("PINSETTER:")){
+    scoremoreConnected = true;
     char s[100];
     int N=separate(cmd, sPtr, SPTR_SIZE,&strData, ':');
     Serial.print("N=");Serial.println(N);
@@ -1435,6 +1470,7 @@ void handleCommand(String cmd){
     }
     freeData(&strData);
   } else if(cmd=="CAMERA:SNAPSHOT_TAKEN"){
+    scoremoreConnected = true;
     waitingForSnapshot = false;
     Serial.println("ACK_SNAPSHOT_TAKEN");
   } else if(cmd=="debug"){
