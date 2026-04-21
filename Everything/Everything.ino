@@ -140,6 +140,8 @@ void scoremoreBallPulse_update(){
 
 // Ball trigger
 int  ballPrev=HIGH; bool ballPending=false, ballRearmed=true, waitingForBall=true;
+bool waitingForSnapshot=false;
+bool pendingComet=false;
 unsigned long ballLowStartUs=0, lastBallHighMs=0;
 int  throwCount=1;
 
@@ -279,7 +281,7 @@ unsigned long sweepStartMs=0, sweepDurationMs=500; bool sweepAnimating=false;
 void runSequence(); unsigned long stepDuration(int idx);
 void DeckUp(); void DeckPinSet(); void DeckPinGrab(); void DeckPinDrop();
 void SlidingDeckRelease(); void SlidingDeckHome(); void ScissorsGrab(); void ScissorsDrop();
-void SweepGuard(); void SweepUp(); void SweepBack();
+void SweepGuard(unsigned long ms = SWEEP_TWEEN_MS); void SweepUp(); void SweepBack();
 void checkSerial(); void handleCommand(String cmd); void checkInputChanges();
 bool isTrackedInput(int pin); void removeInputPin(int pin);
 int resolveArduinoPin(int scoreMorePin); int getScoreMorePin(int arduinoPin); bool isBowlingPin(int scoreMorePin);
@@ -467,6 +469,7 @@ void loop(){
   }
 
   updateSweepTween();
+  if(pendingComet && !sweepAnimating){ pendingComet=false; startBallCometImmediate(); }
   runTurret();
   updateConveyorOutput();
   updateBallReturnDoor();
@@ -512,8 +515,11 @@ void loop(){
         scoreWindowActive=true;
 
         scoremoreBallPulse_begin();
+        #if SCOREMORE_USER == 1
+        waitingForSnapshot = true;
+        #endif
 
-        startBallCometImmediate();
+        //startBallCometImmediate();
         onBallThrownDoorClose();
 
         lastPinCatchMs = millis();
@@ -559,13 +565,16 @@ void runSequence(){
 
   // ---------- Throw #1 ----------
   if(stepIndex==1){
+    #if SCOREMORE_USER == 1
+    if(waitingForSnapshot){ prevStepMillis=millis(); return; }
+    #endif
     if(strikeDetected){
       scoreWindowActive=false;
       Serial.println(F("STRIKE@STEP1"));
-      ScissorsDrop(); SweepGuard();
+      ScissorsDrop(); SweepGuard(200); pendingComet=true;
       stepIndex=11; prevStepMillis=millis(); return;
     }
-    SweepGuard();
+    SweepGuard(200); pendingComet=true;
   }
 
   // ---------- Strike sweep (non-blocking) ----------
@@ -605,7 +614,12 @@ void runSequence(){
   }
 
   // ---------- Throw #2 ----------
-  else if(stepIndex==22){ SweepGuard(); }
+  else if(stepIndex==22){
+    #if SCOREMORE_USER == 1
+    if(waitingForSnapshot){ prevStepMillis=millis(); return; }
+    #endif
+    SweepGuard(200); pendingComet=true;
+  }
   else if(stepIndex==23){ SweepBack(); onSweepBackDoorHoldStart(); }
   else if(stepIndex==24){
     scoreWindowActive=false; 
@@ -667,9 +681,9 @@ void runSequence(){
 }
 
 unsigned long stepDuration(int idx){
-  if(idx==1)  return 3000;
+  if(idx==1)  return 0;
   if(idx>=11 && idx<=13) return STRIKE_SWEEP_PAUSE_MS;
-  if(idx==22) return 3000;
+  if(idx==22) return 0;
   if(idx==31) return 0;
   return 1000;
 }
@@ -711,7 +725,7 @@ void BallReturnClosed()    { BallReturnServo.write(BALL_DOOR_CLOSED_ANGLE); }
 void BallReturnOpen()      { BallReturnServo.write(BALL_DOOR_OPEN_ANGLE); }
 
 // NOTE: set sweepPoseTarget so pause mode can tell where we are
-void SweepGuard(){ sweepPoseTarget = SWEEP_GUARD; startSweepTo(SWEEP_GUARD_ANGLE, 180-SWEEP_GUARD_ANGLE, SWEEP_TWEEN_MS); }
+void SweepGuard(unsigned long ms){ sweepPoseTarget = SWEEP_GUARD; startSweepTo(SWEEP_GUARD_ANGLE, 180-SWEEP_GUARD_ANGLE, ms); }
 void SweepUp()   { sweepPoseTarget = SWEEP_UP;    startSweepTo(SWEEP_UP_ANGLE, 180-SWEEP_UP_ANGLE, SWEEP_TWEEN_MS); }
 void SweepBack() { sweepPoseTarget = SWEEP_BACK;  startSweepTo(SWEEP_BACK_ANGLE, 180-SWEEP_BACK_ANGLE, SWEEP_TWEEN_MS); }
 
@@ -1420,6 +1434,9 @@ void handleCommand(String cmd){
       Serial.println("ACK_NO_PINSETTER_COMMAND_GIVEN");
     }
     freeData(&strData);
+  } else if(cmd=="CAMERA:SNAPSHOT_TAKEN"){
+    waitingForSnapshot = false;
+    Serial.println("ACK_SNAPSHOT_TAKEN");
   } else if(cmd=="debug"){
     dbgDump();
   } else {
