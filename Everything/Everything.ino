@@ -432,7 +432,7 @@ void setup(){
   while(homingActive){
     runTurret(); updateConveyorOutput(); updateBallReturnDoor(); updateSweepTween(); laneUpdate(); delayWithResetButtonCheck(1);
     now = millis();
-    if(now - prevScoreMillis < SCORE_INTERVAL){
+    if(now - prevScoreMillis >= SCORE_INTERVAL){
       prevScoreMillis = now;
       checkSerial();
     }
