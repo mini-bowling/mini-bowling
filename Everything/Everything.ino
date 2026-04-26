@@ -425,11 +425,17 @@ void setup(){
   lastPinCatchMs = millis();
 
   // Initial home (blocking only here)
-  lastRunTurretMs = millis();
+  lastRunTurretMs = prevScoreMillis = millis();
   startHomeTurret();
+  unsigned long now;
   Serial.println("LOG: starting Turret Homing");
   while(homingActive){
     runTurret(); updateConveyorOutput(); updateBallReturnDoor(); updateSweepTween(); laneUpdate(); delayWithResetButtonCheck(1);
+    now = millis();
+    if(now - prevScoreMillis < SCORE_INTERVAL){
+      prevScoreMillis = now;
+      checkSerial();
+    }
   }
 
   NowCatching=1; goTo(PinPositions[1]); loadedCount=0;
@@ -449,6 +455,7 @@ void setup(){
 
   updateFrameLEDs();
   pinsetterResetRequested=false;  // ignore any reset requests that might come in during startup
+  Serial.println("READY");
 }
 
 // ======================= LOOP =======================
