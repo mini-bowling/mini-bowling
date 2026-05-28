@@ -50,6 +50,7 @@ static inline uint32_t C_OFF  (Adafruit_NeoPixel &s){ return s.Color(  0,  0,  0
 // --- LED mode ---
 enum LaneAnimMode { LANE_IDLE_WHITE=0, LANE_STRIKE_WIPE, LANE_STRIKE_FLASH, LANE_BALL_COMET };
 LaneAnimMode laneMode = LANE_IDLE_WHITE;
+void setLaneMode(int new_mode);  // should always set the laneMode with this function
 static inline bool laneAnimActive(){ return laneMode==LANE_BALL_COMET||laneMode==LANE_STRIKE_WIPE||laneMode==LANE_STRIKE_FLASH; }
 bool lanePauseArmed=false, lanePaused=false;
 
@@ -99,6 +100,27 @@ const PinMapping pinMap[] = {
   { SM_PINSETTER_RESET, PINSETTER_RESET_PIN,   false  },
 };
 const int maxPins = sizeof(pinMap) / sizeof(pinMap[0]);
+
+bool attachStateSaved=false;
+enum ServoStateSave {SS_SCISSORS, SS_SLIDE, SS_BALL_RETURN, SS_RAISE, SS_SWEEP};
+
+bool ServoAttachStateSave[] = {
+  false,  //scissors
+  false,  //slide
+  false,  //ball return
+  false,  //raise
+  false,  //sweep
+};
+bool ServoShouldBeDetached[] = {
+  false, //scissors
+  true,  //slide
+  true,  //ball return
+  true,  //raise
+  true,  //sweep  
+};
+void getCurrentServoAttachState();
+void detachServos();
+void reattachServos();
 
 Servo LeftRaiseServo, RightRaiseServo, SlideServo, ScissorsServo, LeftSweepServo, RightSweepServo, BallReturnServo;
 
@@ -219,7 +241,7 @@ int dbgTimingPinCount=0;
 // DEBUG: ring buffer for turret/IR debug messages (replaces live serial output)
 // Memory usage: DBG_RING_SIZE * DBG_LINE_LEN bytes of SRAM (100 * 48 = 4800 bytes).
 // Arduino Mega 2560 has 8192 bytes SRAM total. Reduce DBG_RING_SIZE if low on memory.
-#define DBG_RING_SIZE 100
+#define DBG_RING_SIZE 25
 #define DBG_LINE_LEN  48
 char dbgRing[DBG_RING_SIZE][DBG_LINE_LEN];
 int dbgRingHead = 0;   // next write position
@@ -352,7 +374,7 @@ bool waitForScoreMore(){
 
 // ======================= SETUP =======================
 void setup(){
-  ledsBegin();
+  ledsBegin();deckAll(C_OFF(deckL)); laneAll(C_OFF(laneL)); ledsShowAll();
   pinMode(PINSETTER_RESET_PIN, INPUT_PULLUP);
 
   #ifdef STEPPER_ENABLE_PIN
@@ -435,11 +457,17 @@ void setup(){
   lastPinCatchMs = millis();
 
   // Initial home (blocking only here)
-  lastRunTurretMs = millis();
+  lastRunTurretMs = prevScoreMillis = millis();
   startHomeTurret();
+  unsigned long now;
   Serial.println("LOG: starting Turret Homing");
   while(homingActive){
     runTurret(); updateConveyorOutput(); updateBallReturnDoor(); updateSweepTween(); laneUpdate(); delayWithResetButtonCheck(1);
+    now = millis();
+    if(now - prevScoreMillis >= SCORE_INTERVAL){
+      prevScoreMillis = now;
+      checkSerial();
+    }
   }
 
   NowCatching=1; goTo(PinPositions[1]); loadedCount=0;
@@ -459,6 +487,7 @@ void setup(){
 
   updateFrameLEDs();
   pinsetterResetRequested=false;  // ignore any reset requests that might come in during startup
+  Serial.println("READY");
 }
 
 // ======================= LOOP =======================
@@ -1664,7 +1693,7 @@ void ledsBegin(){
   deckR.setBrightness(DECK_LED_BRIGHTNESS);
   laneL.setBrightness(LED_BRIGHTNESS_NORMAL);
   laneR.setBrightness(LED_BRIGHTNESS_NORMAL);
-  laneMode=LANE_IDLE_WHITE;
+  setLaneMode(LANE_IDLE_WHITE);
 }
 
 void deckAll(uint32_t col){
@@ -1684,12 +1713,12 @@ void startStrikeWipe(){
   lanePauseArmed=true;
   laneL.setBrightness(LED_BRIGHTNESS_STRIKE);
   laneR.setBrightness(LED_BRIGHTNESS_STRIKE);
-  strikeWipeStartMs=millis(); strikeLastFrameMs=0; laneMode=LANE_STRIKE_WIPE;
+  strikeWipeStartMs=millis(); strikeLastFrameMs=0; setLaneMode(LANE_STRIKE_WIPE);
 }
 
 void startStrikeFlash(){
   if(scoreWindowActive) return;
-  flashOnPhase=true; flashCycles=0; flashLastMs=millis(); laneMode=LANE_STRIKE_FLASH;
+  flashOnPhase=true; flashCycles=0; flashLastMs=millis(); setLaneMode(LANE_STRIKE_FLASH);
   uint32_t redL=C_RED(laneL), redR=C_RED(laneR);
   for(int i=0;i<LANE_LED_LENGTH_L;i++) laneL.setPixelColor(i,redL);
   for(int i=0;i<LANE_LED_LENGTH_R;i++) laneR.setPixelColor(i,redR);
@@ -1699,14 +1728,25 @@ void startStrikeFlash(){
 void startBallCometImmediate(){
   lanePauseArmed=true;
   laneAll(C_OFF(laneL)); laneShowOnly();
-  ballCometStartMs=millis(); ballCometLastFrame=0; laneMode=LANE_BALL_COMET;
+  ballCometStartMs=millis(); ballCometLastFrame=0; setLaneMode(LANE_BALL_COMET);
 }
 
 void endAllLaneAnimsToWhite(){
-  laneAll(C_WHITE(laneL)); laneShowOnly(); laneMode=LANE_IDLE_WHITE;
+  laneAll(C_WHITE(laneL)); laneShowOnly(); setLaneMode(LANE_IDLE_WHITE);
   laneL.setBrightness(LED_BRIGHTNESS_NORMAL);
   laneR.setBrightness(LED_BRIGHTNESS_NORMAL);
   lanePaused=false; lanePauseArmed=false;
+}
+
+void setLaneMode(int new_mode){
+  if(laneAnimActive()){
+    if(new_mode==LANE_IDLE_WHITE){
+      reattachServos();
+    }
+  } else if(new_mode!=LANE_IDLE_WHITE){
+      detachServos();
+  }
+	laneMode=new_mode;
 }
 
 void laneUpdate(){
@@ -1784,6 +1824,7 @@ void laneUpdate(){
 }
 
 void startupWipeWhiteQuick(){
+  detachServos();
   deckAll(C_OFF(deckL)); laneAll(C_OFF(laneL)); ledsShowAll();
   int maxLen=LANE_LED_LENGTH_L;
   if(LANE_LED_LENGTH_R>maxLen) maxLen=LANE_LED_LENGTH_R;
@@ -1796,6 +1837,7 @@ void startupWipeWhiteQuick(){
     if(i<LANE_LED_LENGTH_R) laneR.setPixelColor(i,C_WHITE(laneR));
     ledsShowAll(); delay(STARTUP_WIPE_MS_PER_STEP);
   }
+  reattachServos();
   frameLEDsFirstHalf();
 }
 
@@ -1835,7 +1877,7 @@ void setAllLightsRed(){
   ledsShowAll();
 
   // Stop lane animations so laneUpdate() doesn't overwrite the solid red
-  laneMode = LANE_IDLE_WHITE;
+  setLaneMode(LANE_IDLE_WHITE);
   lanePaused = false;
   lanePauseArmed = false;
 
@@ -1848,7 +1890,7 @@ void setAllLightsWhite(){
   laneAll(C_WHITE(laneL));
   ledsShowAll();
 
-  laneMode = LANE_IDLE_WHITE;
+  setLaneMode(LANE_IDLE_WHITE);
   lanePaused = false;
   lanePauseArmed = false;
 
@@ -1948,6 +1990,33 @@ void triggerLaneReset(bool scoreMoreHandlesReset) {
     Serial.println("LOG: Triggering Lane Reset directly");
     pinsetterResetRequested=true;
   }
+}
+void getCurrentServoAttachState(){
+  if(!attachStateSaved) {
+    ServoAttachStateSave[SS_SCISSORS] = ScissorsServo.attached();
+    ServoAttachStateSave[SS_SLIDE] = SlideServo.attached();
+    ServoAttachStateSave[SS_BALL_RETURN] = BallReturnServo.attached();
+    ServoAttachStateSave[SS_RAISE] = LeftRaiseServo.attached();
+    ServoAttachStateSave[SS_SWEEP] = LeftSweepServo.attached();
+  }
+}
+
+void detachServos(){
+  getCurrentServoAttachState();
+  if(ServoShouldBeDetached[SS_SCISSORS]==true) { ScissorsServo.detach(); }
+  if(ServoShouldBeDetached[SS_SLIDE]==true) {SlideServo.detach(); }
+  if(ServoShouldBeDetached[SS_BALL_RETURN]==true) { BallReturnServo.detach(); }
+  if(ServoShouldBeDetached[SS_RAISE]==true) { LeftRaiseServo.detach(); RightRaiseServo.detach();  }
+  if(ServoShouldBeDetached[SS_SWEEP]==true) { LeftSweepServo.detach(); RightSweepServo.detach(); Serial.println("DEBUG: Sweep detached");}
+}
+
+void reattachServos(){
+  if(ServoShouldBeDetached[SS_SCISSORS]==true && ServoAttachStateSave[SS_SCISSORS]==true) { ScissorsServo.attach(SCISSOR_PIN); }
+  if(ServoShouldBeDetached[SS_SLIDE]==true && ServoAttachStateSave[SS_SLIDE]==true) {SlideServo.attach(SLIDE_PIN); }
+  if(ServoShouldBeDetached[SS_BALL_RETURN]==true && ServoAttachStateSave[SS_BALL_RETURN]==true) { BallReturnServo.attach(BALL_RETURN_PIN); }
+  if(ServoShouldBeDetached[SS_RAISE]==true && ServoAttachStateSave[SS_RAISE]==true) { LeftRaiseServo.attach(RAISE_LEFT_PIN); RightRaiseServo.attach(RAISE_RIGHT_PIN); }
+  if(ServoShouldBeDetached[SS_SWEEP]==true && ServoAttachStateSave[SS_SWEEP]==true) { LeftSweepServo.attach(LEFT_SWEEP_PIN); RightSweepServo.attach(RIGHT_SWEEP_PIN); Serial.println("DEBUG: Sweep reattached");}
+  attachStateSaved=false;
 }
 
 void enterMaintenanceMode() {
